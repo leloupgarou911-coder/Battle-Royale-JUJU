@@ -59,6 +59,21 @@ h1 span { color: var(--gold); }
 .live-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: #d8aa72; box-shadow: 0 0 9px #d8aa72; }
 .live-dot.is-ready { background: #8bc7a1; box-shadow: 0 0 9px #8bc7a1; }
 .version { margin-left: auto; color: #65747d; }
+
+.place-card { position: fixed; z-index: 4; right: 22px; bottom: 76px; width: min(320px, calc(100vw - 420px)); padding: 16px; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; background: rgba(13,22,29,.94); color: #f3f6f8; box-shadow: 0 12px 38px rgba(0,0,0,.28); backdrop-filter: blur(16px); }
+.place-card[hidden] { display: none; }
+.place-card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.place-card-label, .place-card-coordinate-label { color: var(--gold); font-size: 8px; font-weight: 700; letter-spacing: .14em; }
+.place-card-close { width: 26px; height: 26px; border: 1px solid rgba(255,255,255,.14); border-radius: 5px; background: transparent; color: #eaf0f2; font-size: 18px; cursor: pointer; }
+.place-card h2 { margin: 10px 0 3px; font: 600 21px "Space Grotesk", sans-serif; }
+.place-card-detail { margin: 0 0 14px; color: #aeb9bf; font-size: 11px; }
+.place-card-coordinate-label { margin: 0 0 5px; color: #91a0a8; }
+.place-card-coordinates { margin: 0; color: #e4b77f; font: 11px "DM Sans", sans-serif; }
+.place-card-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 15px; }
+.place-card-actions button { min-height: 36px; padding: 7px; border: 1px solid rgba(228,183,127,.42); border-radius: 5px; background: rgba(228,183,127,.1); color: #f3f6f8; font: 700 8px "DM Sans", sans-serif; letter-spacing: .04em; cursor: pointer; }
+.place-card-actions button:hover { background: rgba(228,183,127,.2); }
+.place-marker { width: 16px; height: 16px; border: 3px solid #fff; border-radius: 50% 50% 50% 0; background: #d99f62; box-shadow: 0 2px 12px rgba(0,0,0,.5); transform: rotate(-45deg); }
+
 .map-hint { position: fixed; z-index: 3; right: 22px; bottom: 20px; display: flex; align-items: center; gap: 9px; padding: 10px 13px; border: 1px solid rgba(255,255,255,.12); border-radius: 6px; background: rgba(13,22,29,.78); color: #e0e6e9; font-size: 10px; backdrop-filter: blur(10px); }
 .hint-icon { color: var(--gold); font-size: 17px; }
 .toast { position: fixed; z-index: 8; left: 50%; bottom: 72px; transform: translate(-50%, 10px); opacity: 0; pointer-events: none; padding: 11px 15px; border: 1px solid rgba(255,255,255,.15); border-radius: 6px; background: #15232d; color: white; font-size: 11px; transition: .2s; }
@@ -78,6 +93,7 @@ h1 span { color: var(--gold); }
   .quick-places button { padding: 8px 9px; }
   .view-button { min-height: 54px; }
   .panel-footer { min-height: 36px; padding: 0 16px; }
+  .place-card { right: 10px; bottom: 58px; width: min(320px, calc(100vw - 20px)); }
   .map-hint { right: 10px; bottom: 10px; max-width: calc(100vw - 20px); font-size: 8px; }
   .maplibregl-ctrl-bottom-left { left: 10px; bottom: 42px; }
 }
