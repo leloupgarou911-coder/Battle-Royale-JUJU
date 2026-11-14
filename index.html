@@ -1,33 +1,62 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#101820" />
-    <meta name="description" content="Battle-Royale-JUJU — prototype d'exploration 3D dans un monde inspiré de la géographie réelle." />
-    <title>Battle-Royale-JUJU</title>
+    <meta name="description" content="Explore a living 3D world with Battle-Royale-JUJU." />
+    <title>JUJU World — Explore the planet</title>
   </head>
   <body>
-    <div id="app">
-      <div id="game-container" aria-label="Zone de jeu 3D"></div>
-      <div class="hud">
-        <header class="topbar">
-          <div class="brand"><span class="brand-mark">J</span><span>BATTLE ROYALE <strong>JUJU</strong></span></div>
-          <div class="status"><span class="status-dot"></span> PROTOTYPE D'EXPLORATION</div>
-        </header>
-        <section class="intro" id="intro">
-          <p class="eyebrow">PREMIÈRE EXPÉRIENCE · VERSION 0.1</p>
-          <h1>Explorez le<br /><span>monde autrement.</span></h1>
-          <p class="intro-copy">Un premier terrain 3D pour poser les bases de notre monde ouvert.</p>
-          <button id="start-button" type="button">LANCER L'EXPLORATION <span aria-hidden="true">→</span></button>
-          <p class="hint">ZQSD / WASD pour se déplacer · Souris pour orienter la caméra</p>
-        </section>
-        <div class="crosshair" aria-hidden="true">+</div>
-        <div class="game-info"><span id="coordinates">X 0 · Z 0</span><span>ZONE DE TEST</span></div>
-        <div class="controls-help" id="controls-help">ZQSD / WASD · Déplacement <span>ÉCHAP · Libérer la souris</span></div>
-        <div class="loading" id="loading">Chargement de l'environnement 3D…</div>
-      </div>
-    </div>
+    <main id="app">
+      <div id="map" aria-label="Interactive world map"></div>
+      <aside class="panel" aria-label="Map explorer">
+        <div class="panel-top">
+          <a class="brand" href="./" aria-label="JUJU World home">
+            <span class="brand-mark">J</span>
+            <span class="brand-copy"><strong>JUJU WORLD</strong><small>REAL-WORLD EXPLORATION</small></span>
+          </a>
+          <button class="language-button" id="language-toggle" type="button" aria-label="Switch language">FR</button>
+        </div>
+
+        <div class="panel-content">
+          <p class="eyebrow" data-i18n="eyebrow">THE WORLD IS YOUR PLAYGROUND</p>
+          <h1 data-i18n="title">Explore the<br /><span>real world.</span></h1>
+          <p class="intro-copy" data-i18n="intro">Discover places, zoom into cities and prepare to explore a world built from real geography.</p>
+
+          <form id="search-form" class="search-box">
+            <span class="search-icon" aria-hidden="true">⌕</span>
+            <input id="place-search" type="search" autocomplete="off" placeholder="Search a city or a place..." aria-label="Search a city or a place" />
+            <button type="submit" aria-label="Search">↵</button>
+          </form>
+          <div id="search-results" class="search-results" aria-live="polite"></div>
+
+          <div class="section-heading"><span data-i18n="discover">DISCOVER</span><span class="section-line"></span></div>
+          <div class="quick-places">
+            <button type="button" data-place="Algiers">Algiers <span>↗</span></button>
+            <button type="button" data-place="Oran">Oran <span>↗</span></button>
+            <button type="button" data-place="Paris">Paris <span>↗</span></button>
+            <button type="button" data-place="Tokyo">Tokyo <span>↗</span></button>
+          </div>
+
+          <div class="section-heading"><span data-i18n="map-view">MAP VIEW</span><span class="section-line"></span></div>
+          <div class="view-controls">
+            <button id="flat-view" class="view-button" type="button"><span>▱</span><b data-i18n="flat">2D MAP</b></button>
+            <button id="globe-view" class="view-button active" type="button"><span>◎</span><b data-i18n="globe">3D GLOBE</b></button>
+            <button id="buildings-view" class="view-button" type="button"><span>▥</span><b data-i18n="buildings">3D BUILDINGS</b></button>
+          </div>
+        </div>
+
+        <div class="panel-footer">
+          <span class="live-dot"></span>
+          <span id="map-status" data-i18n="loading">CONNECTING TO THE WORLD MAP…</span>
+          <span class="version">ALPHA 0.2</span>
+        </div>
+      </aside>
+
+      <div class="map-hint"><span class="hint-icon">⌖</span><span data-i18n="hint">Drag to move · Scroll to zoom · Right-click to tilt</span></div>
+      <div id="toast" class="toast" role="status"></div>
+    </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
