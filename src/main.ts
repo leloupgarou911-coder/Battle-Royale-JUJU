@@ -94,6 +94,7 @@ function setLanguage(next: Language): void {
   document.querySelectorAll<HTMLElement>("[data-i18n]").forEach((element) => {
     const key = element.dataset.i18n as keyof typeof translations.en;
     if (key === "title") element.innerHTML = translations[next][key];
+    else if (key === "map-view") element.textContent = translations[next].mapView;
     else element.textContent = translations[next][key];
   });
   searchInput.placeholder = translations[next].search;
@@ -262,7 +263,7 @@ document.querySelectorAll<HTMLButtonElement>("[data-place]").forEach((button) =>
 });
 
 setLanguage("en");
-map.on("load", () => mapStatus.classList.add("is-ready"));
+map.on("load", () => $("#map-live-dot").classList.add("is-ready"));
 map.on("error", () => {
   if (!map.loaded()) mapStatus.textContent = translations[language].loading;
 });
