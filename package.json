@@ -1,7 +1,7 @@
 {
   "name": "battle-royale-juju",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "maplibre-gl": "^5.6.2",
     "three": "^0.181.0"
   },
   "devDependencies": {
