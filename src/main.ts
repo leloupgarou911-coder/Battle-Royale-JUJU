@@ -54,7 +54,6 @@ const searchInput = $("#place-search") as HTMLInputElement;
 const searchResults = $("#search-results");
 const toast = $("#toast");
 let language: Language = "en";
-let isGlobe = true;
 let buildingsVisible = true;
 let toastTimeout = 0;
 
@@ -155,7 +154,6 @@ $("#language-toggle").addEventListener("click", () => {
 });
 
 $("#flat-view").addEventListener("click", () => {
-  isGlobe = false;
   map.setProjection({ type: "mercator" });
   map.easeTo({ pitch: 0, bearing: 0, duration: 900 });
   $("#flat-view").classList.add("active");
@@ -163,7 +161,6 @@ $("#flat-view").addEventListener("click", () => {
 });
 
 $("#globe-view").addEventListener("click", () => {
-  isGlobe = true;
   map.setProjection({ type: "globe" });
   map.easeTo({ pitch: 18, bearing: -8, duration: 900 });
   $("#globe-view").classList.add("active");
