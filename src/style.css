@@ -1,0 +1,48 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+:root {
+  font-family: "DM Sans", sans-serif;
+  color: #f4f6f8;
+  background: #101820;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* { box-sizing: border-box; }
+html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body { min-width: 320px; }
+#game-container { position: fixed; inset: 0; background: #9bb9c8; }
+#game-container canvas { display: block; width: 100%; height: 100%; }
+.hud { position: fixed; inset: 0; pointer-events: none; }
+.topbar { height: 76px; padding: 0 5vw; display: flex; align-items: center; justify-content: space-between; background: linear-gradient(180deg, rgba(8,15,21,.7), transparent); }
+.brand { display: flex; align-items: center; gap: 12px; font-family: "Space Grotesk", sans-serif; font-size: 12px; letter-spacing: .16em; }
+.brand strong { color: #d6a66d; }
+.brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid #d6a66d; color: #d6a66d; font-size: 19px; font-weight: 700; }
+.status { color: rgba(255,255,255,.78); font-size: 10px; letter-spacing: .14em; }
+.status-dot { display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: #a8d7a1; box-shadow: 0 0 12px #a8d7a1; }
+.intro { position: absolute; left: 10vw; top: 50%; width: min(520px, 80vw); transform: translateY(-42%); transition: opacity .5s, transform .5s; }
+.intro.is-hidden { opacity: 0; transform: translateY(-48%); pointer-events: none; }
+.eyebrow { color: #e2bd8c; font-size: 10px; letter-spacing: .2em; font-weight: 700; }
+h1 { margin: 18px 0; font-family: "Space Grotesk", sans-serif; font-size: clamp(42px, 6vw, 76px); line-height: .99; letter-spacing: -.055em; text-shadow: 0 3px 28px rgba(0,0,0,.22); }
+h1 span { color: #f0c18b; }
+.intro-copy { max-width: 390px; color: rgba(255,255,255,.82); line-height: 1.7; font-size: 14px; }
+#start-button { margin-top: 25px; padding: 16px 22px; border: 0; background: #d6a66d; color: #17212a; font: 700 11px "DM Sans", sans-serif; letter-spacing: .1em; cursor: pointer; pointer-events: auto; transition: background .2s, transform .2s; }
+#start-button:hover { background: #f0c18b; transform: translateY(-2px); }
+#start-button span { padding-left: 20px; font-size: 16px; }
+.hint { color: rgba(255,255,255,.72); font-size: 11px; margin-top: 18px; }
+.crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: white; opacity: 0; font-size: 20px; text-shadow: 0 1px 5px #000; }
+.game-info { position: absolute; left: 28px; bottom: 26px; display: flex; gap: 18px; color: white; font: 600 10px "Space Grotesk", sans-serif; letter-spacing: .12em; text-shadow: 0 1px 5px #000; }
+.controls-help { position: absolute; right: 28px; bottom: 26px; color: white; font-size: 10px; opacity: 0; text-shadow: 0 1px 5px #000; transition: opacity .3s; }
+.controls-help.is-visible { opacity: .9; }
+.controls-help span { margin-left: 14px; color: #f0c18b; }
+.loading { position: absolute; right: 28px; top: 90px; color: white; font-size: 11px; }
+@media (max-width: 640px) {
+  .topbar { height: 62px; padding: 0 20px; }
+  .status { font-size: 8px; }
+  .intro { left: 7vw; }
+  .controls-help { left: 20px; right: 20px; bottom: 65px; line-height: 2; }
+  .controls-help span { display: block; margin-left: 0; }
+  .game-info { left: 20px; bottom: 22px; }
+}
