@@ -230,7 +230,7 @@ function addPointsOfInterest(): void {
           "art_gallery", "castle", "town_hall", "stadium", "zoo",
           "hospital", "post"
         ]]],
-        ["!", ["in", ["get", "subclass"], ["literal", ["alcohol", "beverages", "wine", "tobacco"]]]],
+        ["!", ["in", ["get", "subclass"], ["literal", ["alcohol", "beverages", "wine", "tobacco", "weapons", "bookmaker", "lottery", "gambling"]]]],
       ],
       paint: {
         "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 3.2, 17, 6],
@@ -267,7 +267,7 @@ function addPointsOfInterest(): void {
           "art_gallery", "castle", "town_hall", "stadium", "zoo",
           "hospital", "post"
         ]]],
-        ["!", ["in", ["get", "subclass"], ["literal", ["alcohol", "beverages", "wine", "tobacco"]]]],
+        ["!", ["in", ["get", "subclass"], ["literal", ["alcohol", "beverages", "wine", "tobacco", "weapons", "bookmaker", "lottery", "gambling"]]]],
       ],
       layout: {
         "text-field": ["coalesce", ["get", "name"], ["get", "name_en"]],
