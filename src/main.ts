@@ -338,10 +338,12 @@ map.on("load", () => {
     // Older browser/GPU combinations can still use the standard 2D map.
   }
   add3DBuildings();
+  addPointsOfInterest();
 });
 
 map.on("style.load", () => {
   add3DBuildings();
+  addPointsOfInterest();
 });
 
 map.on("error", (event) => {
