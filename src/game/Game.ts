@@ -1,0 +1,279 @@
+import * as THREE from "three";
+
+type PositionCallback = (x: number, z: number) => void;
+
+export class Game {
+  private readonly scene = new THREE.Scene();
+  private readonly camera = new THREE.PerspectiveCamera(65, 1, 0.1, 1200);
+  private readonly renderer: THREE.WebGLRenderer;
+  private readonly clock = new THREE.Clock();
+  private readonly player = new THREE.Group();
+  private readonly keys = new Set<string>();
+  private readonly direction = new THREE.Vector3();
+  private readonly forward = new THREE.Vector3();
+  private readonly right = new THREE.Vector3();
+  private readonly onPosition: PositionCallback;
+  private animationFrame = 0;
+  private isRunning = false;
+  private pointerLocked = false;
+  private yaw = 0;
+  private pitch = -0.18;
+
+  constructor(
+    private readonly container: HTMLElement,
+    onPosition: PositionCallback,
+  ) {
+    this.onPosition = onPosition;
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.15;
+    this.container.appendChild(this.renderer.domElement);
+
+    this.buildWorld();
+    this.buildPlayer();
+    this.camera.position.set(0, 5, 9);
+    this.resize();
+    window.addEventListener("resize", this.resize);
+    window.addEventListener("keydown", this.onKeyDown);
+    window.addEventListener("keyup", this.onKeyUp);
+    document.addEventListener("pointerlockchange", this.onPointerLockChange);
+    this.renderer.domElement.addEventListener("click", this.requestPointerLock);
+    document.addEventListener("mousemove", this.onMouseMove);
+  }
+
+  private buildWorld(): void {
+    this.scene.background = new THREE.Color(0x9bb9c8);
+    this.scene.fog = new THREE.Fog(0x9bb9c8, 75, 260);
+
+    const hemisphere = new THREE.HemisphereLight(0xdcecff, 0x59604c, 2.0);
+    this.scene.add(hemisphere);
+
+    const sun = new THREE.DirectionalLight(0xffe3bd, 3.1);
+    sun.position.set(-45, 75, 35);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -100;
+    sun.shadow.camera.right = 100;
+    sun.shadow.camera.top = 100;
+    sun.shadow.camera.bottom = -100;
+    this.scene.add(sun);
+
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(500, 500),
+      new THREE.MeshStandardMaterial({ color: 0x66765b, roughness: 1 }),
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    this.scene.add(ground);
+
+    this.addRoad(0, 0, 12, 190, true);
+    this.addRoad(0, 0, 190, 12, false);
+    this.addRoad(-42, 0, 7, 190, true);
+    this.addRoad(42, 0, 7, 190, true);
+    this.addRoad(0, -42, 190, 7, false);
+    this.addRoad(0, 42, 190, 7, false);
+
+    const blockPositions = [-70, -28, 28, 70];
+    blockPositions.forEach((x, xi) => {
+      blockPositions.forEach((z, zi) => {
+        if ((xi + zi) % 5 === 0) return;
+        this.addBuilding(x, z, 12 + ((xi * 3 + zi * 5) % 17), 10 + ((xi + zi * 2) % 12));
+      });
+    });
+
+    for (let i = 0; i < 34; i += 1) {
+      const side = i % 2 === 0 ? -1 : 1;
+      const x = side * (10 + (i % 4) * 2.5);
+      const z = -78 + i * 4.7;
+      this.addTree(x, z);
+    }
+
+    const grid = new THREE.GridHelper(500, 100, 0x71816b, 0x71816b);
+    grid.position.y = 0.015;
+    (grid.material as THREE.Material).opacity = 0.12;
+    (grid.material as THREE.Material).transparent = true;
+    this.scene.add(grid);
+  }
+
+  private addRoad(x: number, z: number, width: number, length: number, vertical: boolean): void {
+    const road = new THREE.Mesh(
+      new THREE.PlaneGeometry(vertical ? width : length, vertical ? length : width),
+      new THREE.MeshStandardMaterial({ color: 0x343b42, roughness: 0.95 }),
+    );
+    road.rotation.x = -Math.PI / 2;
+    road.position.set(x, 0.025, z);
+    road.receiveShadow = true;
+    this.scene.add(road);
+
+    const line = new THREE.Mesh(
+      new THREE.PlaneGeometry(vertical ? 0.18 : length, vertical ? length : 0.18),
+      new THREE.MeshBasicMaterial({ color: 0xc9b77d }),
+    );
+    line.rotation.x = -Math.PI / 2;
+    line.position.set(x, 0.04, z);
+    this.scene.add(line);
+  }
+
+  private addBuilding(x: number, z: number, width: number, depth: number): void {
+    const height = 8 + Math.random() * 18;
+    const colors = [0xb9b5aa, 0x9caaa9, 0xc4b39e, 0x858f96, 0xd0c8b7];
+    const material = new THREE.MeshStandardMaterial({
+      color: colors[Math.floor(Math.random() * colors.length)],
+      roughness: 0.82,
+    });
+    const building = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+    building.position.set(x, height / 2, z);
+    building.castShadow = true;
+    building.receiveShadow = true;
+    this.scene.add(building);
+
+    const windowMaterial = new THREE.MeshStandardMaterial({
+      color: 0x334b59,
+      roughness: 0.3,
+      metalness: 0.15,
+    });
+    const floors = Math.max(2, Math.floor(height / 3.2));
+    const columns = Math.max(2, Math.floor(width / 3.2));
+    for (let floor = 0; floor < floors; floor += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        const windowMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(1.15, 1.25, 0.08),
+          windowMaterial,
+        );
+        windowMesh.position.set(
+          x - width / 2 + ((column + 0.5) * width) / columns,
+          2.1 + floor * 3.1,
+          z + depth / 2 + 0.05,
+        );
+        this.scene.add(windowMesh);
+      }
+    }
+  }
+
+  private addTree(x: number, z: number): void {
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.22, 0.32, 2.8, 7),
+      new THREE.MeshStandardMaterial({ color: 0x594331 }),
+    );
+    trunk.position.set(x, 1.4, z);
+    trunk.castShadow = true;
+    this.scene.add(trunk);
+
+    const leaves = new THREE.Mesh(
+      new THREE.SphereGeometry(1.8, 8, 7),
+      new THREE.MeshStandardMaterial({ color: 0x526e4d, roughness: 1 }),
+    );
+    leaves.position.set(x, 3.8, z);
+    leaves.scale.y = 1.2;
+    leaves.castShadow = true;
+    this.scene.add(leaves);
+  }
+
+  private buildPlayer(): void {
+    const body = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.48, 1.05, 4, 8),
+      new THREE.MeshStandardMaterial({ color: 0xd69b68, roughness: 0.8 }),
+    );
+    body.position.y = 1.25;
+    body.castShadow = true;
+    this.player.add(body);
+    this.player.position.set(0, 0, 0);
+    this.scene.add(this.player);
+  }
+
+  start(): void {
+    if (this.isRunning) return;
+    this.isRunning = true;
+    this.renderer.domElement.requestPointerLock?.();
+    this.clock.start();
+    this.animate();
+  }
+
+  private animate = (): void => {
+    if (!this.isRunning) return;
+    this.animationFrame = requestAnimationFrame(this.animate);
+    const delta = Math.min(this.clock.getDelta(), 0.05);
+    this.updatePlayer(delta);
+    this.updateCamera(delta);
+    this.renderer.render(this.scene, this.camera);
+    this.onPosition(this.player.position.x, this.player.position.z);
+  };
+
+  private updatePlayer(delta: number): void {
+    const speed = this.keys.has("shift") ? 10 : 5.5;
+    this.forward.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+    this.right.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+    this.direction.set(0, 0, 0);
+
+    if (this.keys.has("w") || this.keys.has("z") || this.keys.has("arrowup")) this.direction.add(this.forward);
+    if (this.keys.has("s") || this.keys.has("arrowdown")) this.direction.sub(this.forward);
+    if (this.keys.has("d") || this.keys.has("arrowright")) this.direction.add(this.right);
+    if (this.keys.has("a") || this.keys.has("q") || this.keys.has("arrowleft")) this.direction.sub(this.right);
+
+    if (this.direction.lengthSq() > 0) {
+      this.direction.normalize();
+      this.player.position.addScaledVector(this.direction, speed * delta);
+    }
+    this.player.position.x = THREE.MathUtils.clamp(this.player.position.x, -95, 95);
+    this.player.position.z = THREE.MathUtils.clamp(this.player.position.z, -95, 95);
+  }
+
+  private updateCamera(delta: number): void {
+    const distance = 7;
+    const target = this.player.position.clone().add(new THREE.Vector3(0, 1.6, 0));
+    const offset = new THREE.Vector3(
+      Math.sin(this.yaw) * distance * Math.cos(this.pitch),
+      2.8 - this.pitch * 2,
+      Math.cos(this.yaw) * distance * Math.cos(this.pitch),
+    );
+    const desired = target.clone().add(offset);
+    this.camera.position.lerp(desired, 1 - Math.pow(0.001, delta));
+    this.camera.lookAt(target);
+  }
+
+  private resize = (): void => {
+    const width = this.container.clientWidth || window.innerWidth;
+    const height = this.container.clientHeight || window.innerHeight;
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(width, height);
+  };
+
+  private onKeyDown = (event: KeyboardEvent): void => {
+    this.keys.add(event.key.toLowerCase());
+  };
+
+  private onKeyUp = (event: KeyboardEvent): void => {
+    this.keys.delete(event.key.toLowerCase());
+  };
+
+  private requestPointerLock = (): void => {
+    if (this.isRunning) this.renderer.domElement.requestPointerLock?.();
+  };
+
+  private onPointerLockChange = (): void => {
+    this.pointerLocked = document.pointerLockElement === this.renderer.domElement;
+  };
+
+  private onMouseMove = (event: MouseEvent): void => {
+    if (!this.pointerLocked) return;
+    this.yaw -= event.movementX * 0.0022;
+    this.pitch = THREE.MathUtils.clamp(this.pitch - event.movementY * 0.0018, -0.55, 0.25);
+  };
+
+  dispose(): void {
+    this.isRunning = false;
+    cancelAnimationFrame(this.animationFrame);
+    document.exitPointerLock?.();
+    window.removeEventListener("resize", this.resize);
+    window.removeEventListener("keydown", this.onKeyDown);
+    window.removeEventListener("keyup", this.onKeyUp);
+    document.removeEventListener("pointerlockchange", this.onPointerLockChange);
+    document.removeEventListener("mousemove", this.onMouseMove);
+    this.renderer.dispose();
+  }
+}
