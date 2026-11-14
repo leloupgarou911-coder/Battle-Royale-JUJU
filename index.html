@@ -55,6 +55,22 @@
         </div>
       </aside>
 
+
+      <section id="place-card" class="place-card" aria-live="polite" hidden>
+        <div class="place-card-top">
+          <span class="place-card-label" data-i18n="selectedLocation">SELECTED LOCATION</span>
+          <button id="place-card-close" class="place-card-close" type="button" aria-label="Close location details">×</button>
+        </div>
+        <h2 id="place-card-name"></h2>
+        <p id="place-card-detail" class="place-card-detail"></p>
+        <p class="place-card-coordinate-label" data-i18n="coordinates">COORDINATES</p>
+        <p id="place-card-coordinates" class="place-card-coordinates"></p>
+        <div class="place-card-actions">
+          <button id="place-card-streets" type="button" data-i18n="streetZoom">ZOOM TO STREETS</button>
+          <button id="place-card-overview" type="button" data-i18n="cityOverview">CITY OVERVIEW</button>
+        </div>
+      </section>
+
       <div class="map-hint"><span class="hint-icon">⌖</span><span data-i18n="hint">Drag to move · Scroll to zoom · Right-click to tilt</span></div>
       <div id="toast" class="toast" role="status"></div>
     </main>
