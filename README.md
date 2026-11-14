@@ -1,37 +1,37 @@
 # Battle-Royale-JUJU
 
-**Battle-Royale-JUJU** est un projet de jeu 3D jouable dans un navigateur. Son ambition est de construire progressivement un monde virtuel inspiré de la géographie réelle, avec exploration, environnements urbains et, à terme, des expériences multijoueurs.
+**JUJU World** is the first browser-based exploration layer for Battle-Royale-JUJU. The project aims to build a navigable virtual world inspired by real geography, starting with a global map and gradually adding selected 3D environments.
 
-> Le dépôt commence par un prototype technique d'exploration 3D. Il ne s'agit pas encore d'un Battle Royale complet.
+## Current version — Alpha 0.2
 
-## Première version — Prototype 0.1
+- Interactive global map powered by MapLibre GL JS.
+- OpenFreeMap map style with OpenStreetMap-based geographic data.
+- Globe and flat map projections.
+- Search for cities and places using Open-Meteo Geocoding.
+- Quick exploration shortcuts for a few example cities.
+- 3D building extrusions where building data is available at close zoom levels.
+- English interface by default, with a French language switch.
+- Responsive desktop and mobile layout.
 
-- Scène 3D rendue avec Three.js.
-- Petit quartier urbain fictif : routes, bâtiments et arbres.
-- Personnage contrôlable à la troisième personne.
-- Caméra orientable à la souris.
-- Commandes clavier AZERTY et QWERTY.
-- Interface de lancement et coordonnées du joueur.
-
-## Technologies
+## Technology
 
 - TypeScript
-- Three.js
 - Vite
-- GitHub Pages (publication statique prévue)
+- MapLibre GL JS
+- OpenFreeMap and OpenStreetMap data
+- Open-Meteo Geocoding API
+- GitHub Pages
 
-## Lancer le projet en local
+## Run locally
 
-Prérequis : Node.js 20.19+ ou 22.12+.
+Requires Node.js 20.19+ or 22.12+.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Ouvre ensuite l'adresse locale indiquée par Vite.
-
-Pour vérifier et compiler :
+Run the checks and production build:
 
 ```bash
 npm run typecheck
@@ -39,36 +39,36 @@ npm run build
 npm run preview
 ```
 
-Le résultat de compilation est généré dans `dist/`.
+## Map controls
 
-## Commandes du prototype
+- Drag to pan.
+- Scroll to zoom.
+- Right-click and drag to change the camera angle.
+- Use the 2D Map and 3D Globe buttons to change projection.
+- Search for a city to fly to it.
+- Zoom in to see available 3D building data.
 
-| Action | Commande |
-|---|---|
-| Avancer | Z / W / ↑ |
-| Reculer | S / ↓ |
-| Aller à gauche | Q / A / ← |
-| Aller à droite | D / → |
-| Courir | Maj |
-| Orienter la caméra | Souris |
-| Libérer la souris | Échap |
+## Deployment
 
-Clique dans la scène pour reprendre le contrôle de la caméra.
+The GitHub Actions workflow builds the Vite app and deploys the `dist/` directory to GitHub Pages. The Vite base path is configured for this repository: `/Battle-Royale-JUJU/`.
 
-## Feuille de route
+In GitHub, open **Settings → Pages** and select **GitHub Actions** as the build and deployment source.
 
-1. Prototype 3D et contrôles de déplacement.
-2. Collisions, terrain et bâtiments mieux détaillés.
-3. Intégration progressive de données géographiques ouvertes et correctement attribuées.
-4. Intérieurs fictifs et exploration de bâtiments sélectionnés.
-5. Optimisation du chargement des zones.
-6. Architecture réseau et sessions multijoueurs.
-7. Modes de jeu et systèmes de progression.
+## Roadmap
 
-## Données géographiques et vie privée
+1. Global map and place search.
+2. Better 3D city visualization and terrain.
+3. Select a pilot area after testing the map.
+4. Add game-ready zones and fictional interiors.
+5. Optimize streaming and performance for large areas.
+6. Add multiplayer architecture after the exploration prototype is stable.
 
-Les premières scènes utilisent des éléments fictifs. Les futures données géographiques devront respecter leurs licences, leurs conditions d'utilisation et la vie privée. Le projet ne cherchera pas à reproduire les intérieurs privés réels des habitations.
+## Attribution and privacy
 
-## Licence
+Map data and map styles are provided by OpenFreeMap and OpenStreetMap contributors. Their attribution is displayed on the map. Geocoding is provided by Open-Meteo. See their respective terms and attribution requirements before changing providers or adding new datasets.
 
-La licence du projet sera définie avant une diffusion publique de ses fichiers et ressources. Les données et ressources tierces conserveront leurs propres licences et attributions.
+The project will not attempt to reproduce private home interiors. Any future geographic datasets must respect their licenses, privacy, and applicable terms.
+
+## License
+
+A project license will be selected before public redistribution of source assets or third-party resources.
