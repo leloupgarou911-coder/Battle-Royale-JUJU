@@ -137,6 +137,26 @@ function add3DBuildings(): void {
   );
 }
 
+function disableTerrain(): void {
+  if (!terrainEnabled) return;
+  map.setTerrain(null);
+  terrainEnabled = false;
+  $("#terrain-view").classList.remove("active");
+}
+
+function setMapView(view: "flat" | "globe"): void {
+  disableTerrain();
+  const isFlat = view === "flat";
+  map.setProjection({ type: isFlat ? "mercator" : "globe" });
+  map.easeTo({
+    pitch: isFlat ? 0 : 18,
+    bearing: isFlat ? 0 : -8,
+    duration: 900,
+  });
+  $("#flat-view").classList.toggle("active", isFlat);
+  $("#globe-view").classList.toggle("active", !isFlat);
+}
+
 map.on("load", () => {
   mapStatus.textContent = translations[language].ready;
   try {
@@ -159,19 +179,8 @@ $("#language-toggle").addEventListener("click", () => {
   setLanguage(language === "en" ? "fr" : "en");
 });
 
-$("#flat-view").addEventListener("click", () => {
-  map.setProjection({ type: "mercator" });
-  map.easeTo({ pitch: 0, bearing: 0, duration: 900 });
-  $("#flat-view").classList.add("active");
-  $("#globe-view").classList.remove("active");
-});
-
-$("#globe-view").addEventListener("click", () => {
-  map.setProjection({ type: "globe" });
-  map.easeTo({ pitch: 18, bearing: -8, duration: 900 });
-  $("#globe-view").classList.add("active");
-  $("#flat-view").classList.remove("active");
-});
+$("#flat-view").addEventListener("click", () => setMapView("flat"));
+$("#globe-view").addEventListener("click", () => setMapView("globe"));
 
 $("#terrain-view").addEventListener("click", () => {
   const terrainButton = $("#terrain-view");
@@ -205,16 +214,15 @@ $("#terrain-view").addEventListener("click", () => {
       $("#globe-view").classList.remove("active");
       showToast(language === "en" ? "3D terrain enabled. Zoom in to explore the relief." : "Relief 3D activé. Zoomez pour explorer le terrain.");
     } else {
-      map.setTerrain(null);
-      map.easeTo({ pitch: 18, bearing: -8, duration: 900 });
-      map.setProjection({ type: "globe" });
-      terrainEnabled = false;
-      terrainButton.classList.remove("active");
-      $("#flat-view").classList.remove("active");
-      $("#globe-view").classList.add("active");
+      disableTerrain();
+      map.easeTo({ pitch: 0, bearing: 0, duration: 900 });
+      $("#flat-view").classList.add("active");
+      $("#globe-view").classList.remove("active");
     }
   } catch (error) {
     console.warn("Terrain could not be enabled:", error);
+    terrainEnabled = false;
+    terrainButton.classList.remove("active");
     showToast(language === "en" ? "3D terrain is temporarily unavailable." : "Le relief 3D est temporairement indisponible.");
   }
 });
