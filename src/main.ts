@@ -95,10 +95,12 @@ function setLanguage(next: Language): void {
   language = next;
   document.documentElement.lang = next;
   document.querySelectorAll<HTMLElement>("[data-i18n]").forEach((element) => {
-    const key = element.dataset.i18n as keyof typeof translations.en;
-    if (key === "title") element.innerHTML = translations[next][key];
+    const key = element.dataset.i18n ?? "";
+    if (key === "title") element.innerHTML = translations[next].title;
     else if (key === "map-view") element.textContent = translations[next].mapView;
-    else element.textContent = translations[next][key];
+    else if (key in translations[next]) {
+      element.textContent = translations[next][key as keyof typeof translations.en];
+    }
   });
   searchInput.placeholder = translations[next].search;
   $("#language-toggle").textContent = next === "en" ? "FR" : "EN";
