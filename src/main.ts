@@ -442,8 +442,13 @@ map.on("click", (event) => {
     .addTo(map);
 });
 
-map.on("mouseenter", "juju-poi-points", () => { map.getCanvas().style.cursor = "pointer"; });
-map.on("mouseleave", "juju-poi-points", () => { map.getCanvas().style.cursor = ""; });
+map.on("mousemove", (event) => {
+  const hasPoiLayer = map.getLayer("juju-poi-points");
+  const overPoi = placesVisible && hasPoiLayer
+    ? map.queryRenderedFeatures(event.point, { layers: ["juju-poi-points"] }).length > 0
+    : false;
+  map.getCanvas().style.cursor = overPoi ? "pointer" : "";
+});
 
 $("#buildings-view").addEventListener("click", () => {
   buildingsVisible = !buildingsVisible;
