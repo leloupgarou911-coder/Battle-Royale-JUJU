@@ -1,7 +1,4 @@
-import maplibregl, {
-  type Map as MapLibreMap,
-  type GeocodingFeatureCollection,
-} from "maplibre-gl";
+import maplibregl, { type Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
 
