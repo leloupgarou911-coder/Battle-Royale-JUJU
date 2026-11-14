@@ -23,6 +23,10 @@ const translations = {
     noResults: "No places found. Try another search.",
     searchError: "Search is temporarily unavailable. Please try again.",
     mapError: "The map could not load. Check your connection and refresh.",
+    selectedLocation: "SELECTED LOCATION",
+    coordinates: "COORDINATES",
+    streetZoom: "ZOOM TO STREETS",
+    cityOverview: "CITY OVERVIEW",
   },
   fr: {
     eyebrow: "LE MONDE EST VOTRE TERRAIN DE JEU",
@@ -42,6 +46,10 @@ const translations = {
     noResults: "Aucun lieu trouvé. Essayez une autre recherche.",
     searchError: "Recherche indisponible pour le moment. Réessayez.",
     mapError: "La carte n'a pas pu charger. Vérifiez votre connexion puis actualisez.",
+    selectedLocation: "LIEU SÉLECTIONNÉ",
+    coordinates: "COORDONNÉES",
+    streetZoom: "ZOOMER SUR LES RUES",
+    cityOverview: "VUE D’ENSEMBLE",
   },
 } as const;
 
@@ -59,6 +67,7 @@ let language: Language = "en";
 let buildingsVisible = true;
 let terrainEnabled = false;
 let toastTimeout = 0;
+let selectedPlaceMarker: maplibregl.Marker | null = null;
 
 const map: MapLibreMap = new maplibregl.Map({
   container: "map",
@@ -105,6 +114,32 @@ function setLanguage(next: Language): void {
   searchInput.placeholder = translations[next].search;
   $("#language-toggle").textContent = next === "en" ? "FR" : "EN";
   $("#language-toggle").setAttribute("aria-label", next === "en" ? "Passer en français" : "Switch to English");
+}
+
+
+function selectPlace(place: PlaceResult): void {
+  selectedPlaceMarker?.remove();
+  const markerElement = document.createElement("div");
+  markerElement.className = "place-marker";
+  markerElement.setAttribute("aria-hidden", "true");
+  selectedPlaceMarker = new maplibregl.Marker({ element: markerElement, anchor: "bottom" })
+    .setLngLat([place.longitude, place.latitude])
+    .addTo(map);
+
+  $("#place-card-name").textContent = place.name;
+  $("#place-card-detail").textContent = [place.admin1, place.country].filter(Boolean).join(", ");
+  $("#place-card-coordinates").textContent = place.latitude.toFixed(4) + ", " + place.longitude.toFixed(4);
+  $("#place-card").hidden = false;
+  map.flyTo({
+    center: [place.longitude, place.latitude],
+    zoom: 16,
+    pitch: 58,
+    bearing: -18,
+    duration: 1900,
+    essential: true,
+  });
+  searchResults.replaceChildren();
+  searchInput.value = place.name;
 }
 
 function add3DBuildings(): void {
@@ -173,6 +208,21 @@ map.on("style.load", () => {
 
 map.on("error", (event) => {
   if (event.error) console.warn("Map resource error:", event.error.message);
+});
+
+
+$("#place-card-close").addEventListener("click", () => {
+  $("#place-card").hidden = true;
+  selectedPlaceMarker?.remove();
+  selectedPlaceMarker = null;
+});
+
+$("#place-card-streets").addEventListener("click", () => {
+  map.easeTo({ zoom: 17, pitch: 62, duration: 900 });
+});
+
+$("#place-card-overview").addEventListener("click", () => {
+  map.easeTo({ zoom: 12, pitch: 35, duration: 900 });
 });
 
 $("#language-toggle").addEventListener("click", () => {
@@ -286,18 +336,7 @@ async function searchPlaces(query: string): Promise<void> {
       const detail = document.createElement("small");
       detail.textContent = [place.admin1, place.country].filter(Boolean).join(", ");
       button.append(name, detail);
-      button.addEventListener("click", () => {
-        map.flyTo({
-          center: [place.longitude, place.latitude],
-          zoom: 14,
-          pitch: 52,
-          bearing: -18,
-          duration: 1800,
-          essential: true,
-        });
-        searchResults.replaceChildren();
-        searchInput.value = place.name;
-      });
+      button.addEventListener("click", () => selectPlace(place));
       searchResults.append(button);
     });
   } catch {
