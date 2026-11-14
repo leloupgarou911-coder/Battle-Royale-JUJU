@@ -15,6 +15,7 @@ const translations = {
     flat: "2D MAP",
     globe: "3D GLOBE",
     buildings: "3D BUILDINGS",
+    terrain: "3D TERRAIN",
     loading: "CONNECTING TO THE WORLD MAP…",
     ready: "WORLD MAP READY",
     hint: "Drag to move · Scroll to zoom · Right-click to tilt",
@@ -33,6 +34,7 @@ const translations = {
     flat: "CARTE 2D",
     globe: "GLOBE 3D",
     buildings: "BÂTIMENTS 3D",
+    terrain: "RELIEF 3D",
     loading: "CONNEXION À LA CARTE DU MONDE…",
     ready: "CARTE DU MONDE PRÊTE",
     hint: "Glisser pour bouger · Molette pour zoomer · Clic droit pour incliner",
@@ -55,6 +57,7 @@ const searchResults = $("#search-results");
 const toast = $("#toast");
 let language: Language = "en";
 let buildingsVisible = true;
+let terrainEnabled = false;
 let toastTimeout = 0;
 
 const map: MapLibreMap = new maplibregl.Map({
@@ -166,6 +169,52 @@ $("#globe-view").addEventListener("click", () => {
   map.easeTo({ pitch: 18, bearing: -8, duration: 900 });
   $("#globe-view").classList.add("active");
   $("#flat-view").classList.remove("active");
+});
+
+$("#terrain-view").addEventListener("click", () => {
+  const terrainButton = $("#terrain-view");
+  try {
+    if (!terrainEnabled) {
+      if (!map.getSource("juju-terrain")) {
+        map.addSource("juju-terrain", {
+          type: "raster-dem",
+          url: "https://tiles.mapterhorn.com/tilejson.json",
+        });
+        map.addSource("juju-hillshade-source", {
+          type: "raster-dem",
+          url: "https://tiles.mapterhorn.com/tilejson.json",
+        });
+      }
+      if (!map.getLayer("juju-hillshade")) {
+        const firstSymbol = map.getStyle().layers?.find((layer) => layer.type === "symbol")?.id;
+        map.addLayer({
+          id: "juju-hillshade",
+          type: "hillshade",
+          source: "juju-hillshade-source",
+          paint: { "hillshade-exaggeration": 0.35 },
+        }, firstSymbol);
+      }
+      map.setProjection({ type: "mercator" });
+      map.setTerrain({ source: "juju-terrain", exaggeration: 1.15 });
+      map.easeTo({ pitch: 62, bearing: -12, duration: 1100 });
+      terrainEnabled = true;
+      terrainButton.classList.add("active");
+      $("#flat-view").classList.add("active");
+      $("#globe-view").classList.remove("active");
+      showToast(language === "en" ? "3D terrain enabled. Zoom in to explore the relief." : "Relief 3D activé. Zoomez pour explorer le terrain.");
+    } else {
+      map.setTerrain(null);
+      map.easeTo({ pitch: 18, bearing: -8, duration: 900 });
+      map.setProjection({ type: "globe" });
+      terrainEnabled = false;
+      terrainButton.classList.remove("active");
+      $("#flat-view").classList.remove("active");
+      $("#globe-view").classList.add("active");
+    }
+  } catch (error) {
+    console.warn("Terrain could not be enabled:", error);
+    showToast(language === "en" ? "3D terrain is temporarily unavailable." : "Le relief 3D est temporairement indisponible.");
+  }
 });
 
 $("#buildings-view").addEventListener("click", () => {
