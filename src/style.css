@@ -50,10 +50,10 @@ h1 span { color: var(--gold); }
 .quick-places button { display: flex; align-items: center; justify-content: space-between; padding: 10px 11px; border: 1px solid rgba(255,255,255,.1); border-radius: 6px; background: rgba(255,255,255,.045); color: #dce3e6; font: 500 11px "DM Sans", sans-serif; cursor: pointer; }
 .quick-places button span { color: var(--gold); }
 .quick-places button:hover { border-color: rgba(228,183,127,.5); }
-.view-controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.view-controls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .view-button { min-height: 67px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 1px solid rgba(255,255,255,.1); border-radius: 6px; background: rgba(255,255,255,.04); color: #aab6bc; cursor: pointer; }
 .view-button span { color: var(--gold); font-size: 18px; }
-.view-button b { font: 700 8px "DM Sans", sans-serif; letter-spacing: .06em; }
+.view-button b { font: 700 7px "DM Sans", sans-serif; letter-spacing: .035em; text-align: center; }
 .view-button.active { border-color: rgba(228,183,127,.7); background: rgba(228,183,127,.12); color: #fff; }
 .panel-footer { min-height: 43px; margin-top: auto; display: flex; align-items: center; gap: 8px; padding: 0 22px; border-top: 1px solid rgba(255,255,255,.09); color: #9eabb2; font-size: 8px; font-weight: 700; letter-spacing: .1em; }
 .live-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: #d8aa72; box-shadow: 0 0 9px #d8aa72; }
