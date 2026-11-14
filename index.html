@@ -43,12 +43,12 @@
           <div class="view-controls">
             <button id="flat-view" class="view-button" type="button"><span>▱</span><b data-i18n="flat">2D MAP</b></button>
             <button id="globe-view" class="view-button active" type="button"><span>◎</span><b data-i18n="globe">3D GLOBE</b></button>
-            <button id="buildings-view" class="view-button" type="button"><span>▥</span><b data-i18n="buildings">3D BUILDINGS</b></button>
+            <button id="buildings-view" class="view-button active" type="button"><span>▥</span><b data-i18n="buildings">3D BUILDINGS</b></button>
           </div>
         </div>
 
         <div class="panel-footer">
-          <span class="live-dot"></span>
+          <span id="map-live-dot" class="live-dot" aria-hidden="true"></span>
           <span id="map-status" data-i18n="loading">CONNECTING TO THE WORLD MAP…</span>
           <span class="version">ALPHA 0.2</span>
         </div>
