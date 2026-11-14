@@ -27,6 +27,17 @@ const translations = {
     coordinates: "COORDINATES",
     streetZoom: "ZOOM TO STREETS",
     cityOverview: "CITY OVERVIEW",
+    pointsOfInterest: "POINTS OF INTEREST",
+    placesOn: "PLACES ON",
+    placesOff: "PLACES OFF",
+    poiPark: "Parks & green spaces",
+    poiEducation: "Education",
+    poiTransport: "Public transport",
+    poiCommerce: "Shops & services",
+    poiCulture: "Culture & landmarks",
+    poiHealth: "Health services",
+    poiUnnamed: "Unnamed place",
+    poiDetails: "Mapped place · OpenStreetMap data",
   },
   fr: {
     eyebrow: "LE MONDE EST VOTRE TERRAIN DE JEU",
@@ -50,6 +61,17 @@ const translations = {
     coordinates: "COORDONNÉES",
     streetZoom: "ZOOMER SUR LES RUES",
     cityOverview: "VUE D’ENSEMBLE",
+    pointsOfInterest: "LIEUX D’INTÉRÊT",
+    placesOn: "LIEUX ACTIVÉS",
+    placesOff: "LIEUX DÉSACTIVÉS",
+    poiPark: "Parcs et espaces verts",
+    poiEducation: "Éducation",
+    poiTransport: "Transports publics",
+    poiCommerce: "Commerces et services",
+    poiCulture: "Culture et monuments",
+    poiHealth: "Services de santé",
+    poiUnnamed: "Lieu sans nom",
+    poiDetails: "Lieu cartographié · Données OpenStreetMap",
   },
 } as const;
 
@@ -65,7 +87,7 @@ const searchResults = $("#search-results");
 const toast = $("#toast");
 let language: Language = "en";
 let buildingsVisible = true;
-let terrainEnabled = false;
+let terrainEnabled = false;\nlet placesVisible = true;
 let toastTimeout = 0;
 let selectedPlaceMarker: maplibregl.Marker | null = null;
 
@@ -172,6 +194,122 @@ function add3DBuildings(): void {
   );
 }
 
+
+function addPointsOfInterest(): void {
+  if (!map.getSource("openmaptiles")) return;
+
+  if (!map.getLayer("juju-park-areas")) {
+    map.addLayer({
+      id: "juju-park-areas",
+      type: "fill",
+      source: "openmaptiles",
+      "source-layer": "park",
+      minzoom: 11,
+      filter: ["==", ["geometry-type"], "Polygon"],
+      paint: {
+        "fill-color": "#70a985",
+        "fill-opacity": 0.16,
+        "fill-outline-color": "#82c99a",
+      },
+      layout: { visibility: placesVisible ? "visible" : "none" },
+    });
+  }
+
+  if (!map.getLayer("juju-poi-points")) {
+    map.addLayer({
+      id: "juju-poi-points",
+      type: "circle",
+      source: "openmaptiles",
+      "source-layer": "poi",
+      minzoom: 13,
+      filter: [
+        "all",
+        ["in", ["get", "class"], ["literal", [
+          "park", "school", "college", "library", "bus", "railway",
+          "shop", "grocery", "cafe", "fast_food", "attraction",
+          "art_gallery", "castle", "town_hall", "stadium", "zoo",
+          "hospital", "post"
+        ]]],
+        ["!", ["in", ["get", "subclass"], ["literal", ["alcohol", "beverages", "wine", "tobacco"]]]],
+      ],
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 3.2, 17, 6],
+        "circle-color": [
+          "match", ["get", "class"],
+          "park", "#79c58d",
+          "school", "#72b7ed", "college", "#72b7ed", "library", "#72b7ed",
+          "bus", "#e9bd69", "railway", "#e9bd69",
+          "shop", "#d9a1e8", "grocery", "#d9a1e8", "cafe", "#d9a1e8", "fast_food", "#d9a1e8", "post", "#d9a1e8",
+          "hospital", "#ed8585",
+          "#e4b77f"
+        ],
+        "circle-stroke-color": "#14212a",
+        "circle-stroke-width": 1.5,
+        "circle-opacity": 0.96,
+      },
+      layout: { visibility: placesVisible ? "visible" : "none" },
+    });
+  }
+
+  if (!map.getLayer("juju-poi-labels")) {
+    map.addLayer({
+      id: "juju-poi-labels",
+      type: "symbol",
+      source: "openmaptiles",
+      "source-layer": "poi",
+      minzoom: 15,
+      filter: [
+        "all",
+        ["has", "name"],
+        ["in", ["get", "class"], ["literal", [
+          "park", "school", "college", "library", "bus", "railway",
+          "shop", "grocery", "cafe", "fast_food", "attraction",
+          "art_gallery", "castle", "town_hall", "stadium", "zoo",
+          "hospital", "post"
+        ]]],
+        ["!", ["in", ["get", "subclass"], ["literal", ["alcohol", "beverages", "wine", "tobacco"]]]],
+      ],
+      layout: {
+        "text-field": ["coalesce", ["get", "name"], ["get", "name_en"]],
+        "text-font": ["Open Sans Regular"],
+        "text-size": 10,
+        "text-offset": [0, 1.1],
+        "text-anchor": "top",
+        "text-max-width": 9,
+        "text-allow-overlap": false,
+        visibility: placesVisible ? "visible" : "none",
+      },
+      paint: {
+        "text-color": "#f5f0e8",
+        "text-halo-color": "#17232c",
+        "text-halo-width": 1.3,
+      },
+    });
+  }
+}
+
+function poiCategory(className: string): string {
+  if (className === "park") return translations[language].poiPark;
+  if (["school", "college", "library"].includes(className)) return translations[language].poiEducation;
+  if (["bus", "railway"].includes(className)) return translations[language].poiTransport;
+  if (["shop", "grocery", "cafe", "fast_food", "post"].includes(className)) return translations[language].poiCommerce;
+  if (className === "hospital") return translations[language].poiHealth;
+  return translations[language].poiCulture;
+}
+
+function togglePointsOfInterest(): void {
+  placesVisible = !placesVisible;
+  ["juju-park-areas", "juju-poi-points", "juju-poi-labels"].forEach((layerId) => {
+    if (map.getLayer(layerId)) {
+      map.setLayoutProperty(layerId, "visibility", placesVisible ? "visible" : "none");
+    }
+  });
+  const button = $("#places-view");
+  button.classList.toggle("active", placesVisible);
+  button.setAttribute("aria-pressed", String(placesVisible));
+  button.querySelector("b")!.textContent = placesVisible ? translations[language].placesOn : translations[language].placesOff;
+}
+
 function disableTerrain(): void {
   if (!terrainEnabled) return;
   map.setTerrain(null);
@@ -276,6 +414,36 @@ $("#terrain-view").addEventListener("click", () => {
     showToast(language === "en" ? "3D terrain is temporarily unavailable." : "Le relief 3D est temporairement indisponible.");
   }
 });
+
+$("#places-view").addEventListener("click", togglePointsOfInterest);
+
+map.on("click", (event) => {
+  if (!placesVisible || !map.getLayer("juju-poi-points")) return;
+  const features = map.queryRenderedFeatures(event.point, { layers: ["juju-poi-points"] });
+  const feature = features[0];
+  if (!feature) return;
+
+  const properties = feature.properties ?? {};
+  const className = String(properties.class ?? "");
+  const placeName = String(properties.name ?? properties.name_en ?? translations[language].poiUnnamed);
+  const category = poiCategory(className);
+  const content = document.createElement("div");
+  content.className = "poi-popup";
+  const title = document.createElement("strong");
+  title.textContent = placeName;
+  const type = document.createElement("span");
+  type.textContent = category;
+  const source = document.createElement("small");
+  source.textContent = translations[language].poiDetails;
+  content.append(title, type, source);
+  new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "260px" })
+    .setLngLat(event.lngLat)
+    .setDOMContent(content)
+    .addTo(map);
+});
+
+map.on("mouseenter", "juju-poi-points", () => { map.getCanvas().style.cursor = "pointer"; });
+map.on("mouseleave", "juju-poi-points", () => { map.getCanvas().style.cursor = ""; });
 
 $("#buildings-view").addEventListener("click", () => {
   buildingsVisible = !buildingsVisible;
