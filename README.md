@@ -9,7 +9,7 @@
 - Globe and flat map projections.
 - Search for cities and places using Open-Meteo Geocoding.
 - Quick exploration shortcuts for a few example cities.
-- 3D building extrusions where building data is available at close zoom levels.
+- 3D building extrusions where building data is available at close zoom levels.\n- Real-world points of interest from OpenMapTiles/OpenStreetMap: parks, education, public transport, shops and services, culture, landmarks, and health services.\n- Clickable POI markers with place names and category details; POI labels appear at closer zoom levels.
 - English interface by default, with a French language switch.
 - Responsive desktop and mobile layout.
 
@@ -46,7 +46,7 @@ npm run preview
 - Right-click and drag to change the camera angle.
 - Use the 2D Map and 3D Globe buttons to change projection.
 - Search for a city to fly to it.
-- Zoom in to see available 3D building data.
+- Zoom in to see available 3D building data.\n- Zoom to level 13 or closer to see mapped points of interest.\n- Toggle **Places of Interest** to show or hide POIs.\n- Click a POI marker to view its mapped name and category.
 
 ## Deployment
 
@@ -65,7 +65,7 @@ In GitHub, open **Settings → Pages** and select **GitHub Actions** as the buil
 
 ## Attribution and privacy
 
-Map data and map styles are provided by OpenFreeMap and OpenStreetMap contributors. Their attribution is displayed on the map. Geocoding is provided by Open-Meteo. See their respective terms and attribution requirements before changing providers or adding new datasets.
+Map data and map styles are provided by OpenFreeMap, OpenMapTiles, and OpenStreetMap contributors. Their attribution is displayed on the map. Geocoding is provided by Open-Meteo. See their respective terms and attribution requirements before changing providers or adding new datasets.
 
 The project will not attempt to reproduce private home interiors. Any future geographic datasets must respect their licenses, privacy, and applicable terms.
 
