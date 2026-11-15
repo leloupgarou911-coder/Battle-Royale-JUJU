@@ -120,6 +120,10 @@ export class Game {
       const z = -78 + i * 4.7;
       this.addTree(x, z);
     }
+    for (let i = 0; i < 18; i += 1) {
+      const side = i % 2 === 0 ? -1 : 1;
+      this.addRock(side * (22 + (i % 3) * 4), -92 + i * 10.5);
+    }
 
     const grid = new THREE.GridHelper(500, 100, 0x71816b, 0x71816b);
     grid.position.y = 0.015;
@@ -147,12 +151,11 @@ export class Game {
         if (!outer || outer.length < 4) continue;
         const points = outer.map(([lng, lat]) => this.geographicToLocal(lng, lat));
         const localRings = polygon.map((ring) => ring.map(([lng, lat]) => this.geographicToLocal(lng, lat)));
-        const xs = points.map(([x]) => x);
-        const zs = points.map(([, z]) => z);
-        this.buildingCollisionShapes.push({
-          minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs),
-          rings: localRings,
-        });
+        const bounds = points.reduce((box, [x, z]) => ({
+          minX: Math.min(box.minX, x), maxX: Math.max(box.maxX, x),
+          minZ: Math.min(box.minZ, z), maxZ: Math.max(box.maxZ, z),
+        }), { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity });
+        this.buildingCollisionShapes.push({ ...bounds, rings: localRings });
         const shape = new THREE.Shape();
         shape.moveTo(points[0][0], -points[0][1]);
         for (let i = 1; i < points.length; i += 1) shape.lineTo(points[i][0], -points[i][1]);
@@ -293,9 +296,12 @@ export class Game {
     for (const building of this.buildingCollisionShapes) {
       if (x + radius < building.minX || x - radius > building.maxX ||
         z + radius < building.minZ || z - radius > building.maxZ) continue;
-      const touchesOuter = offsets.some(([ox, oz]) => this.isInsideLocalRing(x + ox, z + oz, building.rings[0]));
-      const insideHole = building.rings.slice(1).some((hole) => this.isInsideLocalRing(x, z, hole));
-      if (touchesOuter && !insideHole) return true;
+      const touchesSolid = offsets.some(([ox, oz]) => {
+        const sampleX = x + ox, sampleZ = z + oz;
+        return this.isInsideLocalRing(sampleX, sampleZ, building.rings[0]) &&
+          !building.rings.slice(1).some((hole) => this.isInsideLocalRing(sampleX, sampleZ, hole));
+      });
+      if (touchesSolid) return true;
     }
     for (const obstacle of this.obstacleColliders) {
       const combined = radius + obstacle.radius;
@@ -377,6 +383,22 @@ export class Game {
     }
   }
 
+  private addRock(x: number, z: number): void {
+    const rock = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(0.85 + ((Math.abs(x + z) % 5) * 0.12), 0),
+      new THREE.MeshStandardMaterial({ color: 0x777b78, roughness: 1, flatShading: true }),
+    );
+    rock.position.set(x, 0.58, z);
+    rock.rotation.set(0.12, (x - z) * 0.03, 0.08);
+    rock.scale.set(1.25, 0.82, 1);
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    rock.name = "environment-rock";
+    this.obstacleColliders.push({ x, z, radius: 1.08 });
+    this.cameraObstacles.push(rock);
+    this.scene.add(rock);
+  }
+
   private addTree(x: number, z: number): void {
     const trunk = new THREE.Mesh(
       new THREE.CylinderGeometry(0.22, 0.32, 2.8, 7),
@@ -385,6 +407,7 @@ export class Game {
     trunk.position.set(x, 1.4, z);
     trunk.castShadow = true;
     this.obstacleColliders.push({ x, z, radius: 0.78 });
+    this.cameraObstacles.push(trunk);
     this.scene.add(trunk);
 
     const leaves = new THREE.Mesh(
