@@ -320,3 +320,22 @@ h1 span { color: var(--gold); }
 /* Keep progression panel within the compact game HUD */
 .player-progress-panel { width: 100%; max-width: none; box-sizing: border-box; }
 .game-hud { max-height: calc(100vh - 20px); overflow-y: auto; }
+
+/* Daily missions and completion history */
+.daily-missions-panel{width:100%;box-sizing:border-box;margin:0 auto 10px;padding:10px 12px;border:1px solid rgba(120,214,176,.2);border-radius:8px;background:rgba(10,19,24,.92)}
+.daily-missions-heading,.mission-history-heading{display:flex;justify-content:space-between;align-items:center;gap:8px;color:#e8f1ed;font-size:9px;letter-spacing:.08em}
+.daily-missions-heading span{color:#91a49b;font-size:8px}
+.daily-missions-list{display:grid;gap:8px;margin-top:9px}
+.daily-mission-card{display:grid;gap:5px;padding:7px 8px;border:1px solid rgba(255,255,255,.08);border-radius:5px;background:rgba(255,255,255,.025)}
+.daily-mission-top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.daily-mission-top strong{color:#edf5f0;font-size:9px;font-weight:600}
+.daily-mission-top span{color:#9de0bf;font-size:8px;font-weight:700;white-space:nowrap}
+.mission-progress-track{height:4px;overflow:hidden;border-radius:99px;background:rgba(255,255,255,.1)}
+.mission-progress-track span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#5cbf91,#b4e5c7)}
+.daily-mission-card small{color:#91a49b;font-size:8px}
+.mission-history-heading{margin-top:10px;color:#91a49b}
+.mission-history{display:grid;gap:5px;margin-top:6px}
+.mission-history-item{display:flex;justify-content:space-between;gap:8px;margin:0;color:#b7c8bf;font-size:8px}
+.mission-history-item strong{font-weight:600}
+.mission-history-item span{color:#91a49b;white-space:nowrap}
+.mission-history>p:not(.mission-history-item){margin:0;color:#91a49b;font-size:9px}
