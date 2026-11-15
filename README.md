@@ -128,3 +128,10 @@ JUJU World uses the OpenFreeMap Liberty vector style with OpenStreetMap-based ge
 - Seven achievements cover first/5 zones, first/5 cities, 1 km/10 km travelled, and 500 XP. Each unlock grants a displayed badge or title.
 - Progress is saved inside the active local save slot and restored when that slot is resumed. Browser-wide visited-zone outlines remain a separate history.
 - City discovery currently means selecting a city through the in-game place search; it is not yet automatically detected from the player's coordinates. Progress remains local to the browser and is not cloud-synchronised.
+
+## Daily missions
+
+- Each save slot receives three local-date missions: discover three new 750 m zones (+75 XP), discover one city through the in-game place search (+100 XP), and travel 1,000 metres (+100 XP).
+- Mission progress and the last 100 completed-mission records are stored inside the active save slot. A new daily set is generated using the browser's local calendar date.
+- Completed missions award XP once and appear in the recent completion history. City missions currently use the existing city-search discovery event; they are not inferred automatically from the player's coordinates.
+- Missions and history are local to the browser save; there is no account, server-side leaderboard, or cross-device synchronization.
