@@ -9,7 +9,10 @@
 - Globe and flat map projections.
 - Search for cities and places using Open-Meteo Geocoding.
 - Quick exploration shortcuts for a few example cities.
-- 3D building extrusions where building data is available at close zoom levels.\n- Real-world points of interest from OpenMapTiles/OpenStreetMap: parks, education, public transport, shops and services, culture, landmarks, and health services.\n- Clickable POI markers with place names and category details; POI labels appear at closer zoom levels.
+- 3D building extrusions where building data is available at close zoom levels.
+- Worldwide points of interest from OpenMapTiles/OpenStreetMap: parks, schools, universities, libraries, public transport, shops, restaurants, banks, health facilities, public services, sports facilities, museums, monuments, and landmarks where mapped.
+- Clickable POI markers with place names and category details; POI labels appear at closer zoom levels.
+- Global map coverage: the same geographic layers and place categories are used in every country, not only Algeria.
 - English interface by default, with a French language switch.
 - Responsive desktop and mobile layout.
 
@@ -46,7 +49,11 @@ npm run preview
 - Right-click and drag to change the camera angle.
 - Use the 2D Map and 3D Globe buttons to change projection.
 - Search for a city to fly to it.
-- Zoom in to see available 3D building data.\n- Zoom to level 13 or closer to see mapped points of interest.\n- Toggle **Places of Interest** to show or hide POIs.\n- Click a POI marker to view its mapped name and category.
+- Zoom in to see available 3D building data.
+- Zoom to level 13 or closer to see mapped points of interest.
+- Toggle **Places of Interest** to show or hide POIs.
+- Click a POI marker to view its mapped name and category.
+- The same POI categories work worldwide; what appears depends on the local OpenStreetMap/OpenMapTiles coverage.
 
 ## Deployment
 
@@ -75,4 +82,4 @@ A project license will be selected before public redistribution of source assets
 
 ## World map and game camera
 
-JUJU World uses the OpenFreeMap Liberty vector style with OpenStreetMap-based geographic data. The initial view is a global 2D Mercator map with a top-down camera. Use **TOP-DOWN GAME CAMERA** to return to the full-world view and reset the camera for the planned 2D game layer. Map coverage varies by region and zoom level; building and point-of-interest data are not complete everywhere. This is a real-world map foundation, not yet a playable battle-royale mode.
+JUJU World uses the OpenFreeMap Liberty vector style with OpenStreetMap-based geographic data. The initial view is a global 2D Mercator map with a top-down camera. Use **TOP-DOWN GAME CAMERA** to return to the full-world view and reset the camera for the planned 2D game layer. Map coverage varies by country, city, neighbourhood, and zoom level; building and point-of-interest data are community-maintained and are not complete everywhere. JUJU does not use an Algeria-only dataset: it reads the same global map sources wherever their data is available. This is a real-world map foundation, not yet a playable battle-royale mode.
