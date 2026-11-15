@@ -361,6 +361,16 @@ function zoneFor(lng: number, lat: number): { x: number; y: number; key: string 
   return { x, y, key: `${x}:${y}` };
 }
 
+function spawnForZone(zoneX: number, zoneY: number): [number, number] {
+  const size = GAME_ZONE_METERS / WORLD_METERS;
+  const x = (zoneX + 0.5) * size;
+  const y = (zoneY + 0.5) * size;
+  return [
+    x * 360 - 180,
+    Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180 / Math.PI,
+  ];
+}
+
 function zonePolygon(zoneX: number, zoneY: number): GeoJSON.Feature<GeoJSON.Polygon> {
   const size = GAME_ZONE_METERS / WORLD_METERS;
   const west = zoneX * size;
@@ -416,6 +426,23 @@ function ensureGameLayers(): void {
       minzoom: 15,
       filter: ["==", ["geometry-type"], "Polygon"],
       paint: { "fill-color": "#ffffff", "fill-opacity": 0.015 },
+    });
+  }
+  if (!map.getSource("juju-zone-spawn")) {
+    map.addSource("juju-zone-spawn", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    map.addLayer({
+      id: "juju-zone-spawn-marker",
+      type: "circle",
+      source: "juju-zone-spawn",
+      paint: {
+        "circle-radius": 8,
+        "circle-color": "#f4d27c",
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2,
+      },
     });
   }
   if (!map.getSource("juju-zone-obstacles")) {
@@ -476,6 +503,13 @@ function updateGameZone(lng: number, lat: number): void {
   source?.setData(zonePolygon(zone.x, zone.y));
   const obstacles = map.getSource("juju-zone-obstacles") as maplibregl.GeoJSONSource | undefined;
   obstacles?.setData(createZoneObstacles(zone.x, zone.y));
+  const spawnSource = map.getSource("juju-zone-spawn") as maplibregl.GeoJSONSource | undefined;
+  const spawnPoint = spawnForZone(zone.x, zone.y);
+  spawnSource?.setData({
+    type: "Feature",
+    properties: { label: "ZONE SPAWN" },
+    geometry: { type: "Point", coordinates: spawnPoint },
+  });
   $("#game-zone-status").textContent = `ZONE ${zone.x} · ${zone.y}`;
   map.once("idle", () => {
     if (gameMode && activeZoneKey === zone.key) {
@@ -521,7 +555,10 @@ function startGameMode(): void {
   map.setBearing(0);
   map.dragRotate.disable();
   map.touchZoomRotate.disableRotation();
-  const spawn = map.getCenter();
+  const current = map.getCenter();
+  const currentZone = zoneFor(current.lng, current.lat);
+  const spawnCoordinates = spawnForZone(currentZone.x, currentZone.y);
+  const spawn = new maplibregl.LngLat(spawnCoordinates[0], spawnCoordinates[1]);
   ensureGameLayers();
   updateGameZone(spawn.lng, spawn.lat);
   const player = document.createElement("div");
