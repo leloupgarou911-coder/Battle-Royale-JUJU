@@ -17,6 +17,8 @@ import {
 import { classifyBuilding, createInteriorLayout } from "../src/game/interiors.ts";
 import { applyDailyMissionProgress, createDailyMissionState, emptyProgress, normalizeProgress, recordDiscoveredCity, recordDiscoveredZone, recordTravelDistance } from "../src/game/progression.ts";
 import { detectStreamingProfile } from "../src/game/streaming.ts";
+import { readFileSync } from "node:fs";
+import { translations } from "../src/i18n/translations.ts";
 
 test("zone centres map back to their own zone at the equator and higher latitudes", () => {
   for (const latitude of [0, 35, 60, 80, -35, -60, -80]) {
@@ -213,4 +215,18 @@ test("adaptive streaming selects economy, balanced and performance budgets", () 
   assert.deepEqual(detectStreamingProfile({
     online: true, memory: 8, cores: 8, connection: { downlink: 10 },
   }), { tier: "performance", tileCacheSize: 256, zoneCacheLimit: 81, prefetchDepth: 3 });
+});
+
+test("English and French translation dictionaries have identical keys", () => {
+  assert.deepEqual(Object.keys(translations.en).sort(), Object.keys(translations.fr).sort());
+});
+
+test("every HTML translation and accessibility key exists", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  for (const [, key] of html.matchAll(/data-i18n="([^"]+)"/g)) {
+    assert.ok(key === "map-view" || key in translations.en, `Missing text translation: ${key}`);
+  }
+  for (const [, key] of html.matchAll(/data-i18n-aria="([^"]+)"/g)) {
+    assert.ok(key in translations.en, `Missing accessibility translation: ${key}`);
+  }
 });
