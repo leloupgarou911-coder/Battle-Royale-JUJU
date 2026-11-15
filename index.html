@@ -95,11 +95,10 @@
           <h2 id="interior-title">Explorable interior</h2>
           <p id="interior-building-name" class="interior-building-name"></p>
           <p id="interior-note" class="interior-note"></p>
-          <div class="interior-floorplan" aria-label="Fictional interior layout">
-            <div id="interior-hall" class="interior-room room-hall">Entrance hall</div>
-            <div id="interior-room" class="interior-room room-main">Main room</div>
-            <div id="interior-storage" class="interior-room room-side">Side room</div>
-          </div>
+          <p id="interior-controls" class="interior-controls">MOVE: WASD / ARROWS · INTERACT: E</p>
+          <div id="interior-room-status" class="interior-room-status">Entrance hall</div>
+          <div id="interior-board" class="interior-board" role="application" aria-label="Interactive fictional 2D building interior"></div>
+          <p id="interior-message" class="interior-message" aria-live="polite">Press E near furniture to inspect it.</p>
           <button id="interior-exit" class="interior-exit" type="button">LEAVE BUILDING</button>
         </div>
       </section>
