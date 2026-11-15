@@ -96,7 +96,8 @@ JUJU World uses the OpenFreeMap Liberty vector style with OpenStreetMap-based ge
 
 ## Local exploration history
 
-- Visited 750 m game-zone coordinates are saved locally in the browser using `localStorage`; no account or server upload is involved.
+- The current zone grid uses Web Mercator coordinates with a nominal 750 m tile size. Its true ground dimensions vary with latitude, so it must not be treated as an exact 750 m square worldwide yet.
+- Visited game-zone coordinates are saved locally in the browser using `localStorage`; no account or server upload is involved.
 - Up to 200 recently visited zones are retained. Revisiting a zone moves it to the newest position in the local history.
 - Previously visited zone outlines are restored on the game map after a refresh, and the HUD shows the number of saved zones.
 - The **Clear visited zones** control removes this local history. Clearing browser site data or using a different browser/device also removes or separates this history.
@@ -105,7 +106,7 @@ JUJU World uses the OpenFreeMap Liberty vector style with OpenStreetMap-based ge
 
 ## Local game-session recovery
 
-- While game mode is active, the browser periodically saves the player's longitude/latitude, current 750 m zone, movement speed, zoom level, and save timestamp to `localStorage`.
+- While game mode is active, the browser periodically saves the player's longitude/latitude, current nominal 750 m zone, movement speed in metres per second, zoom level, and save timestamp to `localStorage`.
 - On the next page load, a resume panel offers **Resume** (restore the saved position and speed) or **New exploration** (discard the session and start from the current map area).
 - Sessions older than 90 days or with invalid coordinates/settings are discarded. Saving is local to that browser and device; it is not synchronized between devices or uploaded to a server.
 - The session contains location coordinates. Anyone with access to this browser profile may be able to inspect or clear its site data. The existing **Clear visited zones** button clears the exploration history, not the separate session save.
