@@ -834,8 +834,6 @@ function openBuildingInterior(): void {
 
 function closeBuildingInterior(): void {
   $("#building-interior").hidden = true;
-  virtualEntranceMarker?.remove();
-  virtualEntranceMarker = null;
 }
 
 function startGameMode(): void {
