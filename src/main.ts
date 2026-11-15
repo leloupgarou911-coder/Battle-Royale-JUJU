@@ -1953,7 +1953,7 @@ function stopGameMode(): void {
 const heldDirections = new Set<string>();
 let movementFrame = 0;
 let previousMovementTime = 0;
-let movementSpeed = 180;
+let movementSpeed = 4.5;
 
 const directionKeys: Record<string, { x: number; y: number; direction: string }> = {
   arrowup: { x: 0, y: -1, direction: "up" }, w: { x: 0, y: -1, direction: "up" }, z: { x: 0, y: -1, direction: "up" },
@@ -1987,11 +1987,25 @@ function movementTick(time: number): void {
   }
   const length = Math.hypot(dx, dy);
   if (length > 0 && delta > 0) {
-    dx = (dx / length) * movementSpeed * delta;
-    dy = (dy / length) * movementSpeed * delta;
+    dx /= length;
+    dy /= length;
     const center = map.getCenter();
-    const point = map.project(center);
-    const next = map.unproject([point.x + dx, point.y + dy]);
+    const distance = movementSpeed * delta;
+    const bearing = Math.atan2(dx, -dy);
+    const angularDistance = distance / 6371000;
+    const latitude = center.lat * Math.PI / 180;
+    const nextLatitude = Math.asin(
+      Math.sin(latitude) * Math.cos(angularDistance)
+      + Math.cos(latitude) * Math.sin(angularDistance) * Math.cos(bearing),
+    );
+    const nextLongitude = center.lng * Math.PI / 180 + Math.atan2(
+      Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(latitude),
+      Math.cos(angularDistance) - Math.sin(latitude) * Math.sin(nextLatitude),
+    );
+    const next = new maplibregl.LngLat(
+      ((nextLongitude * 180 / Math.PI + 540) % 360) - 180,
+      nextLatitude * 180 / Math.PI,
+    );
     if (isBuildingCollision(next.lng, next.lat)) {
       $("#game-player-status").textContent = language === "en" ? "BLOCKED" : "BLOQUÉ";
       heldDirections.clear();
