@@ -108,7 +108,7 @@
 
       <section class="game-hud" aria-label="Game controls">
         <div class="game-hud-top"><span class="game-hud-brand">JUJU <b>GAME MODE</b></span><span id="game-player-status">PLAYER READY</span></div>
-        <div class="game-hud-stats"><div><small>ACTIVE ZONE</small><strong id="game-zone-status">ZONE READY</strong><span id="game-zone-coordinates">0.000, 0.000</span></div><div><small>PLAYER</small><strong>TOP-DOWN</strong><span data-i18n="moveHelp">WASD / ARROWS TO MOVE</span></div><div><small data-i18n="streamingLabel">STREAMING</small><strong id="game-streaming-status">BALANCED</strong><span id="game-streaming-detail">Cache 49 · Ahead 2</span></div></div>
+        <div class="game-hud-stats"><div><small>ACTIVE ZONE</small><strong id="game-zone-status">ZONE READY</strong><span id="game-zone-coordinates">0.000, 0.000</span></div><div><small>PLAYER</small><strong>TOP-DOWN</strong><span data-i18n="moveHelp">WASD / ARROWS TO MOVE</span></div><div><small data-i18n="streamingLabel">STREAMING</small><strong id="game-streaming-status">BALANCED</strong><span id="game-streaming-detail">Cache 49 · Ahead 2</span></div><div><small data-i18n="exploredZones">VISITED</small><strong id="game-explored-count">0</strong><span>LOCAL</span></div></div>
         <div class="game-speed-control">
           <label for="game-speed">MOVEMENT SPEED <strong id="game-speed-value">180</strong></label>
           <input id="game-speed" type="range" min="80" max="360" step="10" value="180" />
@@ -118,6 +118,7 @@
           <div><button type="button" data-move="left" aria-label="Move left">◀</button><button type="button" data-move="down" aria-label="Move down">▼</button><button type="button" data-move="right" aria-label="Move right">▶</button></div>
         </div>
         <div class="game-hud-actions"><button id="game-zone-reload" type="button" data-i18n="loadZone">RELOAD CURRENT ZONE</button><button id="game-mode-toggle" type="button" data-i18n="enterGame">ENTER GAME MODE</button></div>
+        <button id="game-clear-explored" class="game-clear-explored" type="button" data-i18n="clearExplored">CLEAR VISITED ZONES</button>
       </section>
       <div class="map-hint"><span class="hint-icon">⌖</span><span data-i18n="hint">Drag to move · Scroll to zoom · Right-click to tilt</span></div>
       <div id="toast" class="toast" role="status"></div>
