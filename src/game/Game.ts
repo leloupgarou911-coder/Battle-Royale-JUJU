@@ -25,6 +25,12 @@ export class Game {
   private pointerLocked = false;
   private yaw = 0;
   private pitch = -0.18;
+  private cameraDistance = 7;
+  private verticalVelocity = 0;
+  private readonly gravity = 18;
+  private readonly jumpImpulse = 6.2;
+  private readonly maxStepHeight = 0.65;
+  private readonly cameraRaycaster = new THREE.Raycaster();
 
   constructor(
     private readonly container: HTMLElement,
@@ -55,6 +61,7 @@ export class Game {
     window.addEventListener("keyup", this.onKeyUp);
     document.addEventListener("pointerlockchange", this.onPointerLockChange);
     this.renderer.domElement.addEventListener("click", this.requestPointerLock);
+    this.renderer.domElement.addEventListener("wheel", this.onCameraWheel, { passive: false });
     document.addEventListener("mousemove", this.onMouseMove);
   }
 
@@ -143,6 +150,7 @@ export class Game {
         building.position.y = base + this.terrainHeightAt(centreX, centreZ);
         building.castShadow = true;
         building.receiveShadow = true;
+        building.name = "mapped-building";
         this.scene.add(building);
       }
     }
@@ -391,11 +399,29 @@ export class Game {
   };
 
   private updatePlayer(delta: number): void {
-    const speed = this.keys.has("shift") ? 10 : 5.5;
+    const grounded = this.player.position.y <= this.terrainHeightAt(this.player.position.x, this.player.position.z) + 0.035;
+    if (grounded) {
+      this.player.position.y = this.terrainHeightAt(this.player.position.x, this.player.position.z);
+      this.verticalVelocity = 0;
+      if (this.keys.has(" ") || this.keys.has("space")) {
+        this.verticalVelocity = this.jumpImpulse;
+        this.keys.delete(" ");
+        this.keys.delete("space");
+      }
+    } else {
+      this.verticalVelocity -= this.gravity * delta;
+      this.player.position.y += this.verticalVelocity * delta;
+      const groundY = this.terrainHeightAt(this.player.position.x, this.player.position.z);
+      if (this.player.position.y <= groundY) {
+        this.player.position.y = groundY;
+        this.verticalVelocity = 0;
+      }
+    }
+
+    const speed = this.keys.has("shift") ? 9 : 5.2;
     this.forward.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     this.right.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     this.direction.set(0, 0, 0);
-
     if (this.keys.has("w") || this.keys.has("z") || this.keys.has("arrowup")) this.direction.add(this.forward);
     if (this.keys.has("s") || this.keys.has("arrowdown")) this.direction.sub(this.forward);
     if (this.keys.has("d") || this.keys.has("arrowright")) this.direction.add(this.right);
@@ -403,26 +429,51 @@ export class Game {
 
     if (this.direction.lengthSq() > 0) {
       this.direction.normalize();
-      const nextX = this.player.position.x + this.direction.x * speed * delta;
-      const nextZ = this.player.position.z + this.direction.z * speed * delta;
-      // Resolve axes separately so the character can slide along mapped building walls.
-      if (!this.collidesWithBuilding(nextX, this.player.position.z)) this.player.position.x = nextX;
-      if (!this.collidesWithBuilding(this.player.position.x, nextZ)) this.player.position.z = nextZ;
+      const dx = this.direction.x * speed * delta;
+      const dz = this.direction.z * speed * delta;
+      const currentGround = this.terrainHeightAt(this.player.position.x, this.player.position.z);
+      const canStepTo = (x: number, z: number): boolean => {
+        if (this.collidesWithBuilding(x, z)) return false;
+        const nextGround = this.terrainHeightAt(x, z);
+        // Walk up gentle slopes and small steps; steep faces need a jump.
+        return nextGround - currentGround <= this.maxStepHeight;
+      };
+      const nextX = this.player.position.x + dx;
+      const nextZ = this.player.position.z + dz;
+      // Axis-separated resolution allows sliding along building walls.
+      if (canStepTo(nextX, this.player.position.z)) this.player.position.x = nextX;
+      if (canStepTo(this.player.position.x, nextZ)) this.player.position.z = nextZ;
+      if (grounded && this.verticalVelocity === 0) {
+        const targetGround = this.terrainHeightAt(this.player.position.x, this.player.position.z);
+        this.player.position.y = Math.max(this.player.position.y, targetGround);
+      }
     }
     this.player.position.x = THREE.MathUtils.clamp(this.player.position.x, -145, 145);
     this.player.position.z = THREE.MathUtils.clamp(this.player.position.z, -145, 145);
-    this.player.position.y = this.terrainHeightAt(this.player.position.x, this.player.position.z);
+    const floor = this.terrainHeightAt(this.player.position.x, this.player.position.z);
+    if (this.player.position.y < floor) {
+      this.player.position.y = floor;
+      this.verticalVelocity = 0;
+    }
   }
 
   private updateCamera(delta: number): void {
-    const distance = 7;
-    const target = this.player.position.clone().add(new THREE.Vector3(0, 1.6, 0));
+    const target = this.player.position.clone().add(new THREE.Vector3(0, 1.35, 0));
+    const horizontal = this.cameraDistance * Math.cos(this.pitch);
     const offset = new THREE.Vector3(
-      Math.sin(this.yaw) * distance * Math.cos(this.pitch),
-      2.8 - this.pitch * 2,
-      Math.cos(this.yaw) * distance * Math.cos(this.pitch),
+      Math.sin(this.yaw) * horizontal,
+      1.9 - this.pitch * 2.2,
+      Math.cos(this.yaw) * horizontal,
     );
     const desired = target.clone().add(offset);
+    // Keep the third-person camera in front of nearby mapped walls.
+    const rayDirection = desired.clone().sub(target);
+    const desiredDistance = rayDirection.length();
+    this.cameraRaycaster.set(target, rayDirection.normalize());
+    this.cameraRaycaster.far = desiredDistance;
+    const obstacles = this.scene.children.filter((object) => object.name === "mapped-building");
+    const hit = this.cameraRaycaster.intersectObjects(obstacles, false)[0];
+    if (hit) desired.copy(target).addScaledVector(rayDirection.normalize(), Math.max(1.1, hit.distance - 0.35));
     this.camera.position.lerp(desired, 1 - Math.pow(0.001, delta));
     this.camera.lookAt(target);
   }
@@ -436,7 +487,9 @@ export class Game {
   };
 
   private onKeyDown = (event: KeyboardEvent): void => {
-    this.keys.add(event.key.toLowerCase());
+    const key = event.key.toLowerCase();
+    if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) event.preventDefault();
+    this.keys.add(key);
   };
 
   private onKeyUp = (event: KeyboardEvent): void => {
@@ -451,6 +504,11 @@ export class Game {
     this.pointerLocked = document.pointerLockElement === this.renderer.domElement;
   };
 
+  private onCameraWheel = (event: WheelEvent): void => {
+    event.preventDefault();
+    this.cameraDistance = THREE.MathUtils.clamp(this.cameraDistance + Math.sign(event.deltaY) * 0.8, 3.5, 11);
+  };
+
   private onMouseMove = (event: MouseEvent): void => {
     if (!this.pointerLocked) return;
     this.yaw -= event.movementX * 0.0022;
@@ -462,6 +520,7 @@ export class Game {
     cancelAnimationFrame(this.animationFrame);
     document.exitPointerLock?.();
     window.removeEventListener("resize", this.resize);
+    this.renderer.domElement.removeEventListener("wheel", this.onCameraWheel);
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
     document.removeEventListener("pointerlockchange", this.onPointerLockChange);
