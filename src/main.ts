@@ -225,7 +225,6 @@ let virtualEntranceMarker: maplibregl.Marker | null = null;
 let selectedBuildingName = "";
 let selectedBuildingType: BuildingKind = "other";
 let selectedBuildingLevels = 1;
-let selectedBuildingTags: Record<string, unknown> = {};
 let activeZoneKey = "";
 let interiorPosition = { x: 2, y: 4 };
 let interiorLastDirection = "down";
@@ -903,7 +902,7 @@ function renderInterior(): void {
       if (item) {
         cell.classList.add("interior-furniture");
         cell.textContent = item.glyph;
-        cell.setAttribute("aria-label", translations[language][item.label]);
+        cell.setAttribute("aria-label", translations[language][item.label as keyof typeof translations.en]);
         cell.title = translations[language][item.label];
         cell.dataset.object = item.id;
         cell.addEventListener("click", () => inspectInteriorObject(item.id));
@@ -1329,7 +1328,6 @@ map.on("click", (event) => {
       : undefined;
     if (building) {
       const props = (building.properties ?? {}) as Record<string, unknown>;
-      selectedBuildingTags = props;
       selectedBuildingType = classifyBuilding(props);
       selectedBuildingLevels = Math.max(1, Math.min(20, Number(props.render_height ? Math.round(Number(props.render_height) / 3) : props.levels ?? props["building:levels"] ?? 1) || 1));
       selectedBuildingName = String(props.name ?? props.name_en ?? buildingTypeLabel(selectedBuildingType));
