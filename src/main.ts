@@ -4,7 +4,7 @@ import "./style.css";
 import { createZoneObstacles, legacyMercatorZoneCenter, spawnForZone, zoneAtOffset, zoneFor, zonePolygon } from "./game/zones.ts";
 import { destinationFromDirection, haversineDistance, normalizeDirection } from "./game/movement.ts";
 import { classifyBuilding, createInteriorLayout, type BuildingKind, type InteriorDoor, type InteriorObject } from "./game/interiors.ts";
-import { applyDailyMissionProgress, emptyProgress, ensureDailyMissions as ensureProgressDailyMissions, normalizeProgress, recordDiscoveredCity, recordDiscoveredZone, recordTravelDistance, type DailyMission, type DailyMissionState, type MissionHistoryEntry, type PlayerProgress } from "./game/progression.ts";
+import { applyDailyMissionProgress, createDailyMissionState as createProgressDailyMissionState, emptyProgress, ensureDailyMissions as ensureProgressDailyMissions, normalizeProgress, recordDiscoveredCity, recordDiscoveredZone, recordTravelDistance, type DailyMissionState, type MissionHistoryEntry, type PlayerProgress } from "./game/progression.ts";
 import { isValidGameSession, type SavedGameSession } from "./game/saves.ts";
 
 type Language = "en" | "fr";
@@ -420,7 +420,7 @@ function loadSavedGameSlots(): void {
           ...item,
           name: item.name.trim().slice(0, 32) || "Exploration",
           progress: normalizeProgress(item.progress),
-          dailyMissions: item.dailyMissions && typeof item.dailyMissions.date === "string" && Array.isArray(item.dailyMissions.missions) ? item.dailyMissions : createDailyMissionState(),
+          dailyMissions: item.dailyMissions && typeof item.dailyMissions.date === "string" && Array.isArray(item.dailyMissions.missions) ? item.dailyMissions : createProgressDailyMissionState(localDateKey()),
           missionHistory: Array.isArray(item.missionHistory) ? item.missionHistory.filter((entry) => entry && typeof entry.id === "string" && typeof entry.date === "string" && Number.isFinite(entry.completedAt) && Number.isFinite(entry.rewardXp)).slice(-100) : [],
           session: {
             ...item.session,
