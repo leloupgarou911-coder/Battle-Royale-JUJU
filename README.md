@@ -136,3 +136,42 @@ JUJU World uses the OpenFreeMap Liberty vector style with OpenStreetMap-based ge
 - Mission progress and the last 100 completed-mission records are stored inside the active save slot. A new daily set is generated using the browser's local calendar date.
 - Completed missions award XP once and appear in the recent completion history. City missions currently use the existing city-search discovery event; they are not inferred automatically from the player's coordinates.
 - Missions and history are local to the browser save; there is no account, server-side leaderboard, or cross-device synchronization.
+
+
+## Development checks
+
+Run these commands before publishing changes:
+
+```bash
+npm ci
+npm run typecheck
+npm test
+npm run build
+npm run test:browser
+```
+
+The native Node test suite covers geographic zone dimensions, movement distance, collision geometry, building classification, fictional interior layouts, save validation, progression, daily missions, streaming budgets, and translation-key consistency.
+
+The Playwright suite runs Chromium in desktop and mobile viewports. It checks the home screen, French language switching, settings dialog, HUD visibility, and horizontal overflow. GitHub Actions uploads the screenshots and traces as the `juju-browser-test-results` artifact.
+
+## Source modules
+
+- `src/game/zones.ts`: latitude-aware geographic zone grid, zone bounds, procedural scenery, and legacy exploration-history migration.
+- `src/game/movement.ts`: spherical movement destinations, direction normalization, and Haversine distance.
+- `src/game/collisions.ts`: screen-space collision sampling and circle overlap checks.
+- `src/game/interiors.ts`: building classification and fictional interior templates.
+- `src/game/progression.ts`: XP, discoveries, daily missions, and mission history.
+- `src/game/saves.ts`: saved-session validation.
+- `src/game/streaming.ts`: adaptive map-streaming budgets.
+- `src/i18n/translations.ts`: English and French interface strings.
+
+`src/main.ts` still coordinates the map, DOM, and gameplay lifecycle; further extraction into map, UI, and save-management controllers remains future work.
+
+## Important technical limitations
+
+- The game-zone grid uses latitude bands and adjusts the number of longitude columns by latitude. A cell is approximately 750 m north/south and east/west at the centre of its latitude band; it is not a mathematically perfect square at every point.
+- The map uses Web Mercator, so the visible world is limited to approximately 85.05° north/south. Polar areas are outside the normal map view.
+- Buildings, roads, green spaces, and POIs depend on OpenStreetMap/OpenMapTiles coverage. The map does not contain surveyed floor plans or real private interiors.
+- Building interiors are generated fictional layouts selected from mapped building tags. Mapped floor counts are metadata; they do not prove the real arrangement of rooms, stairs, or furniture.
+- `src/game/Game.ts` is a separate Three.js prototype and is not currently wired into the published MapLibre top-down game mode. The active public game remains a map-based exploration prototype, not a completed 3D battle-royale experience.
+- Map tiles require an internet connection. Browser-cached exploration history and save slots do not make the map available offline.
