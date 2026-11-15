@@ -2179,16 +2179,38 @@ const game3dOverlay = document.querySelector<HTMLElement>("#game-3d-overlay");
 const game3dContainer = document.querySelector<HTMLElement>("#game-3d-canvas");
 const game3dExit = document.querySelector<HTMLButtonElement>("#game-3d-exit");
 
+let lastThreeDimensionalPosition: [number, number] | null = null;
+
 function leaveThreeDimensionalPrototype(): void {
   activeThreeGame?.dispose();
   activeThreeGame = null;
   if (game3dOverlay) game3dOverlay.hidden = true;
   if (gameMode) return;
+  const slot = activeSlot();
+  if (slot && lastThreeDimensionalPosition) {
+    const [lng, lat] = lastThreeDimensionalPosition;
+    const zone = zoneFor(lng, lat);
+    slot.session = { ...slot.session, lng, lat, zoneX: zone.x, zoneY: zone.y, savedAt: Date.now() };
+    slot.updatedAt = Date.now();
+    persistSavedGameSlots();
+    renderSavedGameSlots();
+  }
+  lastThreeDimensionalPosition = null;
   startGameMode(activeSlot()?.session ?? null);
 }
 
 game3dButton?.addEventListener("click", () => {
   if (!gameMode || !game3dOverlay || !game3dContainer) return;
+  const origin = map.getCenter();
+  const mappedBuildings = map.querySourceFeatures("openmaptiles", { sourceLayer: "building" })
+    .filter((feature): feature is GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> =>
+      feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon")
+    .slice(0, 350) as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
+  const uniqueBuildings = new Map<string, GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>>();
+  mappedBuildings.forEach((feature) => {
+    const key = String(feature.id ?? JSON.stringify(feature.geometry.coordinates));
+    if (!uniqueBuildings.has(key)) uniqueBuildings.set(key, feature);
+  });
   stopGameMode();
   game3dOverlay.hidden = false;
   const t = translations[language];
@@ -2202,15 +2224,21 @@ game3dButton?.addEventListener("click", () => {
   if (help) help.textContent = t.game3dHelp;
   try {
     activeThreeGame?.dispose();
-    activeThreeGame = new Game(game3dContainer, (x, z) => {
+    lastThreeDimensionalPosition = [origin.lng, origin.lat];
+    activeThreeGame = new Game(game3dContainer, (x, z, lng, lat) => {
+      lastThreeDimensionalPosition = [lng, lat];
       const readout = document.querySelector<HTMLElement>("#game-3d-position");
-      if (readout) readout.textContent = `LOCAL 3D POSITION · ${x.toFixed(1)} / ${z.toFixed(1)} m`;
-    });
+      if (readout) readout.textContent = `3D · ${x.toFixed(1)} / ${z.toFixed(1)} m · ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    }, { origin: [origin.lng, origin.lat], buildings: [...uniqueBuildings.values()] });
     activeThreeGame.start();
+    const count = uniqueBuildings.size;
+    showToast(language === "fr"
+      ? (count ? `${count} empreintes de bâtiments cartographiques chargées en 3D.` : "Aucun bâtiment cartographique chargé ici : décor de secours affiché.")
+      : (count ? `${count} mapped building footprints loaded in 3D.` : "No mapped buildings loaded here: fallback scenery shown."));
   } catch (error) {
-    console.error("Could not start the Three.js prototype:", error);
+    console.error("Could not start the Three.js world:", error);
     game3dOverlay.hidden = true;
-    showToast(language === "fr" ? "Le prototype 3D n'a pas pu démarrer sur cet appareil." : "The 3D prototype could not start on this device.");
+    showToast(language === "fr" ? "Le monde 3D n'a pas pu démarrer sur cet appareil." : "The 3D world could not start on this device.");
     startGameMode(activeSlot()?.session ?? null);
   }
 });
