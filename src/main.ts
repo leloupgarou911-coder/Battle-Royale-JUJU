@@ -903,7 +903,7 @@ function renderInterior(): void {
         cell.classList.add("interior-furniture");
         cell.textContent = item.glyph;
         cell.setAttribute("aria-label", translations[language][item.label as keyof typeof translations.en]);
-        cell.title = translations[language][item.label];
+        cell.title = translations[language][item.label as keyof typeof translations.en];
         cell.dataset.object = item.id;
         cell.addEventListener("click", () => inspectInteriorObject(item.id));
       }
@@ -940,7 +940,7 @@ function interiorRoomForPosition(): string {
 function inspectInteriorObject(id: string): void {
   const item = interiorObjects.find((object) => object.id === id);
   if (!item) return;
-  interiorLastMessage = `${translations[language].interiorObjectHint} : ${translations[language][item.label]}`;
+  interiorLastMessage = `${translations[language].interiorObjectHint} : ${translations[language][item.label as keyof typeof translations.en]}`;
   $("#interior-message").textContent = interiorLastMessage;
 }
 
