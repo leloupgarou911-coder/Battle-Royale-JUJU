@@ -1082,13 +1082,15 @@ function addPointsOfInterest(): void {
       ],
       paint: {
         "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 3.2, 17, 6],
-        "circle-color": [
+                "circle-color": [
           "match", ["get", "class"],
-          "park", "#79c58d",
-          "school", "#72b7ed", "college", "#72b7ed", "library", "#72b7ed",
-          "bus", "#e9bd69", "railway", "#e9bd69",
-          "shop", "#d9a1e8", "grocery", "#d9a1e8", "cafe", "#d9a1e8", "fast_food", "#d9a1e8", "post", "#d9a1e8",
-          "hospital", "#ed8585",
+          "park", "#79c58d", "garden", "#79c58d", "nature_reserve", "#79c58d",
+          "school", "#72b7ed", "college", "#72b7ed", "university", "#72b7ed", "kindergarten", "#72b7ed", "library", "#72b7ed",
+          "bus", "#e9bd69", "railway", "#e9bd69", "subway", "#e9bd69", "tram", "#e9bd69", "ferry", "#e9bd69", "airport", "#e9bd69",
+          "shop", "#d9a1e8", "grocery", "#d9a1e8", "supermarket", "#d9a1e8", "clothes", "#d9a1e8", "bakery", "#d9a1e8", "cafe", "#d9a1e8", "restaurant", "#d9a1e8", "fast_food", "#d9a1e8", "bank", "#d9a1e8", "atm", "#d9a1e8", "post", "#d9a1e8",
+          "hospital", "#ed8585", "clinic", "#ed8585", "doctors", "#ed8585", "pharmacy", "#ed8585",
+          "police", "#e9a56d", "fire_station", "#e9a56d", "government", "#e9a56d", "town_hall", "#e9a56d", "courthouse", "#e9a56d",
+          "stadium", "#82c9b2", "sports_centre", "#82c9b2", "pitch", "#82c9b2", "playground", "#82c9b2", "swimming_pool", "#82c9b2",
           "#e4b77f"
         ],
         "circle-stroke-color": "#14212a",
