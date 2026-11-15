@@ -2,7 +2,9 @@ import * as THREE from "three";
 
 type PositionCallback = (x: number, z: number, lng: number, lat: number) => void;
 type MappedBuildingFeature = GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>;
-interface GameWorldData { origin: [number, number]; buildings: MappedBuildingFeature[]; }
+type MappedRoadFeature = GeoJSON.Feature<GeoJSON.LineString | GeoJSON.MultiLineString>;
+interface TerrainSample { x: number; z: number; elevation: number; }
+interface GameWorldData { origin: [number, number]; buildings: MappedBuildingFeature[]; roads: MappedRoadFeature[]; terrain: TerrainSample[]; terrainSize: number; terrainSegments: number; }
 
 export class Game {
   private readonly scene = new THREE.Scene();
@@ -42,6 +44,8 @@ export class Game {
     this.container.appendChild(this.renderer.domElement);
 
     this.buildWorld();
+    this.buildMappedTerrain();
+    this.buildMappedRoads();
     this.buildMappedBuildings();
     this.buildPlayer();
     this.camera.position.set(0, 5, 9);
@@ -79,12 +83,10 @@ export class Game {
     ground.receiveShadow = true;
     this.scene.add(ground);
 
-    this.addRoad(0, 0, 12, 190, true);
-    this.addRoad(0, 0, 190, 12, false);
-    this.addRoad(-42, 0, 7, 190, true);
-    this.addRoad(42, 0, 7, 190, true);
-    this.addRoad(0, -42, 190, 7, false);
-    this.addRoad(0, 42, 190, 7, false);
+    if (this.worldData.roads.length === 0) {
+      this.addRoad(0, 0, 12, 190, true);
+      this.addRoad(0, 0, 190, 12, false);
+    }
 
     if (this.worldData.buildings.length === 0) {
       const blockPositions = [-70, -28, 28, 70];
@@ -142,6 +144,137 @@ export class Game {
       }
     }
   }
+
+  private buildMappedTerrain(): void {
+    const { terrain, terrainSegments, terrainSize } = this.worldData;
+    const expected = (terrainSegments + 1) * (terrainSegments + 1);
+    if (terrain.length !== expected || terrainSegments < 1) return;
+    const positions: number[] = [];
+    const uvs: number[] = [];
+    const indices: number[] = [];
+    const step = terrainSize / terrainSegments;
+    for (let row = 0; row <= terrainSegments; row += 1) {
+      for (let column = 0; column <= terrainSegments; column += 1) {
+        const sample = terrain[row * (terrainSegments + 1) + column];
+        positions.push(sample.x, sample.elevation, sample.z);
+        uvs.push(column / terrainSegments, row / terrainSegments);
+      }
+    }
+    for (let row = 0; row < terrainSegments; row += 1) {
+      for (let column = 0; column < terrainSegments; column += 1) {
+        const a = row * (terrainSegments + 1) + column;
+        const b = a + 1;
+        const c = a + terrainSegments + 1;
+        const d = c + 1;
+        indices.push(a, c, b, b, c, d);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    const material = new THREE.MeshStandardMaterial({ color: 0x66765b, roughness: 1, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.receiveShadow = true;
+    mesh.name = "mapped-terrain";
+    this.scene.add(mesh);
+    // Keep the terrain mesh centred under the sampled local grid.
+    if (Math.abs(step * terrainSegments - terrainSize) > 0.01) return;
+  }
+
+  private roadWidth(properties: Record<string, unknown>): number {
+    const roadClass = String(properties.class ?? properties.subclass ?? "residential");
+    const widths: Record<string, number> = {
+      motorway: 10, trunk: 9, primary: 8, secondary: 7, tertiary: 6,
+      minor: 5, residential: 5, unclassified: 4.5, service: 3.5,
+      living_street: 4, pedestrian: 4, track: 3.5, path: 2,
+      footway: 1.8, cycleway: 2.2, steps: 1.8,
+    };
+    return widths[roadClass] ?? 3.5;
+  }
+
+  private buildMappedRoads(): void {
+    const material = new THREE.MeshStandardMaterial({ color: 0x42494d, roughness: 0.98, side: THREE.DoubleSide });
+    const maxRoadFeatures = 700;
+    for (const feature of this.worldData.roads.slice(0, maxRoadFeatures)) {
+      const lines = feature.geometry.type === "LineString" ? [feature.geometry.coordinates] : feature.geometry.coordinates;
+      const width = this.roadWidth((feature.properties ?? {}) as Record<string, unknown>);
+      for (const line of lines) {
+        if (line.length < 2) continue;
+        const points = line.map(([lng, lat]) => this.geographicToLocal(lng, lat));
+        const vertices: number[] = [];
+        const indices: number[] = [];
+        for (let i = 0; i < points.length; i += 1) {
+          const previous = points[Math.max(0, i - 1)];
+          const next = points[Math.min(points.length - 1, i + 1)];
+          const dx = next[0] - previous[0];
+          const dz = next[1] - previous[1];
+          const length = Math.hypot(dx, dz) || 1;
+          const ox = (-dz / length) * width * 0.5;
+          const oz = (dx / length) * width * 0.5;
+          vertices.push(points[i][0] + ox, 0.055, points[i][1] + oz);
+          vertices.push(points[i][0] - ox, 0.055, points[i][1] - oz);
+          if (i > 0) {
+            const a = (i - 1) * 2;
+            indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+          }
+        }
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+        geometry.setIndex(indices);
+        geometry.computeVertexNormals();
+        const road = new THREE.Mesh(geometry, material);
+        road.receiveShadow = true;
+        road.name = "mapped-road";
+        this.scene.add(road);
+      }
+    }
+  }
+
+  private isInsideRing(x: number, z: number, ring: number[][]): boolean {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+      const a = this.geographicToLocal(ring[i][0], ring[i][1]);
+      const b = this.geographicToLocal(ring[j][0], ring[j][1]);
+      if ((a[1] > z) !== (b[1] > z) &&
+        x < ((b[0] - a[0]) * (z - a[1])) / ((b[1] - a[1]) || 1e-9) + a[0]) inside = !inside;
+    }
+    return inside;
+  }
+
+  private collidesWithBuilding(x: number, z: number): boolean {
+    const radius = 0.62;
+    const offsets: [number, number][] = [[0, 0], [radius, 0], [-radius, 0], [0, radius], [0, -radius],
+      [radius * 0.7, radius * 0.7], [-radius * 0.7, radius * 0.7], [radius * 0.7, -radius * 0.7], [-radius * 0.7, -radius * 0.7]];
+    for (const feature of this.worldData.buildings) {
+      const polygons = feature.geometry.type === "Polygon" ? [feature.geometry.coordinates] : feature.geometry.coordinates;
+      for (const polygon of polygons) {
+        const outer = polygon[0];
+        if (!outer || outer.length < 4) continue;
+        if (offsets.some(([ox, oz]) => this.isInsideRing(x + ox, z + oz, outer))) return true;
+      }
+    }
+    return false;
+  }
+
+  private terrainHeightAt(x: number, z: number): number {
+    const { terrain, terrainSegments, terrainSize } = this.worldData;
+    if (!terrain.length || terrainSegments < 1) return 0;
+    const half = terrainSize / 2;
+    const column = THREE.MathUtils.clamp(((x + half) / terrainSize) * terrainSegments, 0, terrainSegments);
+    const row = THREE.MathUtils.clamp(((z + half) / terrainSize) * terrainSegments, 0, terrainSegments);
+    const c0 = Math.floor(column), r0 = Math.floor(row);
+    const c1 = Math.min(terrainSegments, c0 + 1), r1 = Math.min(terrainSegments, r0 + 1);
+    const tx = column - c0, tz = row - r0;
+    const stride = terrainSegments + 1;
+    const a = terrain[r0 * stride + c0]?.elevation ?? 0;
+    const b = terrain[r0 * stride + c1]?.elevation ?? a;
+    const c = terrain[r1 * stride + c0]?.elevation ?? a;
+    const d = terrain[r1 * stride + c1]?.elevation ?? a;
+    return THREE.MathUtils.lerp(THREE.MathUtils.lerp(a, b, tx), THREE.MathUtils.lerp(c, d, tx), tz);
+  }
+
   private addRoad(x: number, z: number, width: number, length: number, vertical: boolean): void {
     const road = new THREE.Mesh(
       new THREE.PlaneGeometry(vertical ? width : length, vertical ? length : width),
@@ -261,10 +394,15 @@ export class Game {
 
     if (this.direction.lengthSq() > 0) {
       this.direction.normalize();
-      this.player.position.addScaledVector(this.direction, speed * delta);
+      const nextX = this.player.position.x + this.direction.x * speed * delta;
+      const nextZ = this.player.position.z + this.direction.z * speed * delta;
+      // Resolve axes separately so the character can slide along mapped building walls.
+      if (!this.collidesWithBuilding(nextX, this.player.position.z)) this.player.position.x = nextX;
+      if (!this.collidesWithBuilding(this.player.position.x, nextZ)) this.player.position.z = nextZ;
     }
-    this.player.position.x = THREE.MathUtils.clamp(this.player.position.x, -95, 95);
-    this.player.position.z = THREE.MathUtils.clamp(this.player.position.z, -95, 95);
+    this.player.position.x = THREE.MathUtils.clamp(this.player.position.x, -145, 145);
+    this.player.position.z = THREE.MathUtils.clamp(this.player.position.z, -145, 145);
+    this.player.position.y = this.terrainHeightAt(this.player.position.x, this.player.position.z);
   }
 
   private updateCamera(delta: number): void {
