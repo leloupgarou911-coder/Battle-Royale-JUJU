@@ -14,6 +14,7 @@ import {
   haversineDistance,
   normalizeDirection,
 } from "../src/game/movement.ts";
+import { classifyBuilding, createInteriorLayout } from "../src/game/interiors.ts";
 
 test("zone centres map back to their own zone at the equator and higher latitudes", () => {
   for (const latitude of [0, 35, 60, 80, -35, -60, -80]) {
