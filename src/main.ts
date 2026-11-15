@@ -18,6 +18,7 @@ const translations = {
     exitGame: "EXIT GAME MODE",
     loadZone: "RELOAD CURRENT ZONE",
     zoneReady: "ZONE READY",
+    zoneLoading: "LOADING NEARBY MAP…",
     moveHelp: "WASD / ARROWS TO MOVE",
     playerReady: "PLAYER READY",
     globe: "3D GLOBE",
@@ -118,6 +119,7 @@ const translations = {
     exitGame: "QUITTER LE MODE JEU",
     loadZone: "RECHARGER LA ZONE",
     zoneReady: "ZONE CHARGÉE",
+    zoneLoading: "CHARGEMENT DE LA CARTE PROCHE…",
     moveHelp: "ZQSD / FLÈCHES POUR BOUGER",
     playerReady: "JOUEUR PRÊT",
     globe: "GLOBE 3D",
@@ -235,6 +237,8 @@ let interiorLastDirection = "down";
 let interiorLastMessage = "";
 const GAME_ZONE_METERS = 750;
 const WORLD_METERS = 40075016.68557849;
+const ZONE_CACHE_LIMIT = 81;
+const zoneObstacleCache = new Map<string, GeoJSON.FeatureCollection<GeoJSON.Point>>();
 
 const map: MapLibreMap = new maplibregl.Map({
   container: "map",
@@ -248,6 +252,9 @@ const map: MapLibreMap = new maplibregl.Map({
   maxPitch: 75,
   attributionControl: false,
   renderWorldCopies: true,
+  // Keep nearby vector tiles available as the player crosses world zones.
+  maxTileCacheSize: 256,
+  minTileCacheSize: 64,
   dragRotate: false,
   pitchWithRotate: false,
   touchPitch: false,
@@ -520,6 +527,14 @@ function zonePolygon(zoneX: number, zoneY: number): GeoJSON.Feature<GeoJSON.Poly
 }
 
 function createZoneObstacles(zoneX: number, zoneY: number): GeoJSON.FeatureCollection<GeoJSON.Point> {
+  // Keep a small LRU cache so revisiting a streamed zone does not regenerate its scenery.
+  const cacheKey = `${zoneX}:${zoneY}`;
+  const cached = zoneObstacleCache.get(cacheKey);
+  if (cached) {
+    zoneObstacleCache.delete(cacheKey);
+    zoneObstacleCache.set(cacheKey, cached);
+    return cached;
+  }
   // Deterministic decorative obstacles: the same zone always recreates the same layout.
   let seed = Math.abs((zoneX * 73856093) ^ (zoneY * 19349663)) || 1;
   const random = (): number => {
@@ -543,7 +558,14 @@ function createZoneObstacles(zoneX: number, zoneY: number): GeoJSON.FeatureColle
       geometry: { type: "Point", coordinates: [lng, lat] },
     });
   }
-  return { type: "FeatureCollection", features };
+  const collection: GeoJSON.FeatureCollection<GeoJSON.Point> = { type: "FeatureCollection", features };
+  zoneObstacleCache.set(cacheKey, collection);
+  while (zoneObstacleCache.size > ZONE_CACHE_LIMIT) {
+    const oldestKey = zoneObstacleCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    zoneObstacleCache.delete(oldestKey);
+  }
+  return collection;
 }
 
 function ensureGameLayers(): void {
@@ -729,9 +751,11 @@ function updateGameZone(lng: number, lat: number): void {
   const obstacles = map.getSource("juju-zone-obstacles") as maplibregl.GeoJSONSource | undefined;
   // Stream decorative props for the active zone and its eight neighbours.
   const nearbyFeatures: GeoJSON.Feature<GeoJSON.Point>[] = [];
-  for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
-    for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
-      nearbyFeatures.push(...createZoneObstacles(zone.x + offsetX, zone.y + offsetY).features);
+  // Render the active zone plus its eight neighbours; warm a second ring for the next move.
+  for (let offsetX = -2; offsetX <= 2; offsetX += 1) {
+    for (let offsetY = -2; offsetY <= 2; offsetY += 1) {
+      const zoneFeatures = createZoneObstacles(zone.x + offsetX, zone.y + offsetY).features;
+      if (Math.abs(offsetX) <= 1 && Math.abs(offsetY) <= 1) nearbyFeatures.push(...zoneFeatures);
     }
   }
   obstacles?.setData({ type: "FeatureCollection", features: nearbyFeatures });
@@ -742,10 +766,13 @@ function updateGameZone(lng: number, lat: number): void {
     properties: { label: "ZONE SPAWN" },
     geometry: { type: "Point", coordinates: spawnPoint },
   });
-  $("#game-zone-status").textContent = `ZONE ${zone.x} · ${zone.y}`;
+  $("#game-zone-status").textContent = `${translations[language].zoneLoading} · ${zone.x}:${zone.y}`;
   map.once("idle", () => {
     if (gameMode && activeZoneKey === zone.key) {
-      $("#game-zone-status").textContent = `ZONE ${zone.x} · ${zone.y} · READY`;
+      const sourceReady = map.isSourceLoaded("openmaptiles") && map.areTilesLoaded();
+      $("#game-zone-status").textContent = sourceReady
+        ? `ZONE ${zone.x} · ${zone.y} · ${translations[language].zoneReady}`
+        : `${translations[language].zoneLoading} · ${zone.x}:${zone.y}`;
     }
   });
 }
@@ -1034,7 +1061,7 @@ function startGameMode(): void {
   map.easeTo({ center: spawn, zoom: Math.max(16, map.getZoom()), pitch: 0, bearing: 0, duration: 850 });
   $("#app").classList.add("game-mode");
   $("#game-mode-toggle").textContent = translations[language].exitGame;
-  $("#game-zone-status").textContent = translations[language].zoneReady;
+  $("#game-zone-status").textContent = translations[language].zoneLoading;
   $("#game-player-status").textContent = translations[language].playerReady;
   $("#game-camera").classList.add("active");
   $("#flat-view").classList.add("active");
@@ -1171,6 +1198,17 @@ function setMapView(view: "flat" | "globe"): void {
 }
 
 map.on("moveend", () => { if (gameMode) updateGameHud(); });
+
+// MapLibre streams vector tiles for the visible viewport as the camera moves.
+map.on("sourcedata", (event) => {
+  if (!gameMode || event.sourceId !== "openmaptiles" || !event.isSourceLoaded) return;
+  if (map.areTilesLoaded()) {
+    const zone = zoneFor(map.getCenter().lng, map.getCenter().lat);
+    if (activeZoneKey === zone.key) {
+      $("#game-zone-status").textContent = `ZONE ${zone.x} · ${zone.y} · ${translations[language].zoneReady}`;
+    }
+  }
+});
 
 map.on("load", () => {
   ensureGameLayers();
