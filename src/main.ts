@@ -606,12 +606,103 @@ function renderSavedGameSlots(): void {
 function clearActiveSaveSlot(): void {
   activeSaveSlotId = null;
 }
+
+function openHomeDialog(title: string, content: HTMLElement): void {
+  const overlay = document.querySelector<HTMLElement>("#home-dialog");
+  const heading = document.querySelector<HTMLElement>("#home-dialog-title");
+  const body = document.querySelector<HTMLElement>("#home-dialog-content");
+  if (!overlay || !heading || !body) return;
+  heading.textContent = title;
+  body.replaceChildren(content);
+  overlay.hidden = false;
+}
+function closeHomeDialog(): void {
+  const overlay = document.querySelector<HTMLElement>("#home-dialog");
+  if (overlay) overlay.hidden = true;
+}
+function openHomeSaves(): void {
+  renderSavedGameSlots();
+  const panel = document.querySelector<HTMLElement>("#resume-session");
+  const home = document.querySelector<HTMLElement>("#home-screen");
+  if (home) home.hidden = true;
+  if (panel) panel.hidden = false;
+}
+function openHomeProfile(): void {
+  const slot = savedGameSlots.find((item) => item.id === activeSaveSlotId) ?? savedGameSlots[0];
+  const progress = slot?.progress ?? emptyProgress();
+  const wrap = document.createElement("div");
+  wrap.className = "home-profile-content";
+  const level = document.createElement("div");
+  level.className = "home-profile-level";
+  level.innerHTML = '<span>LEVEL</span><strong>' + (Math.floor(progress.xp / 100) + 1) + '</strong><small>' + progress.xp + ' XP TOTAL</small>';
+  const stats = document.createElement("div");
+  stats.className = "home-profile-stats";
+  const entries = [
+    [language === "fr" ? "DISTANCE" : "DISTANCE", (progress.distanceMeters / 1000).toFixed(1) + " km"],
+    [language === "fr" ? "ZONES VISITÉES" : "ZONES VISITED", String(progress.zones.length)],
+    [language === "fr" ? "VILLES DÉCOUVERTES" : "CITIES DISCOVERED", String(progress.cities.length)],
+    [language === "fr" ? "SUCCÈS" : "ACHIEVEMENTS", String(progress.achievements.length) + " / 7"]
+  ];
+  entries.forEach(([label, value]) => {
+    const item = document.createElement("div");
+    const small = document.createElement("small"); small.textContent = label;
+    const strong = document.createElement("strong"); strong.textContent = value;
+    item.append(small, strong); stats.append(item);
+  });
+  const note = document.createElement("p");
+  note.className = "home-dialog-note";
+  note.textContent = slot
+    ? (language === "fr" ? "Profil basé sur la sauvegarde : " : "Profile based on save: ") + slot.name
+    : (language === "fr" ? "Créez une exploration pour commencer votre progression." : "Create an exploration to start tracking your progress.");
+  wrap.append(level, stats, note);
+  openHomeDialog(language === "fr" ? "PROFIL & PROGRESSION" : "PROFILE & PROGRESSION", wrap);
+}
+function openHomeSettings(): void {
+  const wrap = document.createElement("div");
+  wrap.className = "home-settings-content";
+  const languageRow = document.createElement("div");
+  languageRow.className = "home-setting-row";
+  const languageText = document.createElement("div");
+  languageText.innerHTML = '<strong>LANGUAGE / LANGUE</strong><small>English · Français</small>';
+  const languageButton = document.createElement("button");
+  languageButton.type = "button"; languageButton.textContent = language.toUpperCase();
+  languageButton.addEventListener("click", () => { setLanguage(language === "en" ? "fr" : "en"); languageButton.textContent = language.toUpperCase(); });
+  languageRow.append(languageText, languageButton);
+  const speedRow = document.createElement("div");
+  speedRow.className = "home-setting-row";
+  const speedText = document.createElement("div");
+  speedText.innerHTML = '<strong>' + (language === "fr" ? "VITESSE DE DÉPLACEMENT" : "MOVEMENT SPEED") + '</strong><small>' + (language === "fr" ? "Ajustable à tout moment" : "Can be adjusted anytime") + '</small>';
+  const speed = document.createElement("input");
+  speed.type = "range"; speed.min = "80"; speed.max = "360"; speed.step = "10"; speed.value = String(movementSpeed);
+  speed.addEventListener("input", () => {
+    movementSpeed = Number(speed.value);
+    const control = document.querySelector<HTMLInputElement>("#game-speed");
+    const value = document.querySelector<HTMLElement>("#game-speed-value");
+    if (control) control.value = speed.value;
+    if (value) value.textContent = speed.value;
+  });
+  speedRow.append(speedText, speed);
+  const poiRow = document.createElement("div");
+  poiRow.className = "home-setting-row";
+  const poiText = document.createElement("div");
+  poiText.innerHTML = '<strong>' + (language === "fr" ? "POINTS D’INTÉRÊT" : "POINTS OF INTEREST") + '</strong><small>' + (language === "fr" ? "Afficher les lieux sur la carte" : "Show mapped places") + '</small>';
+  const poiButton = document.createElement("button");
+  poiButton.type = "button";
+  const poiControl = document.querySelector<HTMLButtonElement>("#places-view");
+  const syncPoi = () => { poiButton.textContent = poiControl?.getAttribute("aria-pressed") === "true" ? "ON" : "OFF"; };
+  syncPoi();
+  poiButton.addEventListener("click", () => { poiControl?.click(); syncPoi(); });
+  poiRow.append(poiText, poiButton);
+  wrap.append(languageRow, speedRow, poiRow);
+  openHomeDialog(language === "fr" ? "PARAMÈTRES" : "SETTINGS", wrap);
+}
+
 function showSessionResumePrompt(): void {
   loadSavedGameSlots();
   renderSavedGameSlots();
   renderPlayerProgress();
   const panel = document.querySelector<HTMLElement>("#resume-session");
-  if (panel) panel.hidden = savedGameSlots.length === 0;
+  if (panel) panel.hidden = true;
 }
 const EXPLORED_ZONE_LIMIT = 200;
 interface ExploredZone { x: number; y: number; visitedAt: number }
@@ -1871,6 +1962,28 @@ map.on("error", (event) => {
   if (event.error) console.warn("Map resource error:", event.error.message);
 });
 
+
+
+$("#home-play").addEventListener("click", () => {
+  if (savedGameSlots.length > 0) openHomeSaves();
+  else {
+    const home = document.querySelector<HTMLElement>("#home-screen");
+    if (home) home.hidden = true;
+    startGameMode();
+  }
+});
+$("#home-saves").addEventListener("click", openHomeSaves);
+$("#home-settings").addEventListener("click", openHomeSettings);
+$("#home-profile").addEventListener("click", openHomeProfile);
+$("#home-language").addEventListener("click", () => setLanguage(language === "en" ? "fr" : "en"));
+$("#home-dialog-close").addEventListener("click", closeHomeDialog);
+$("#home-dialog").addEventListener("click", (event) => { if (event.target === $("#home-dialog")) closeHomeDialog(); });
+$("#save-slots-back").addEventListener("click", () => {
+  const panel = document.querySelector<HTMLElement>("#resume-session");
+  const home = document.querySelector<HTMLElement>("#home-screen");
+  if (panel) panel.hidden = true;
+  if (home) home.hidden = false;
+});
 
 $("#place-card-close").addEventListener("click", () => {
   $("#place-card").hidden = true;
