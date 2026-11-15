@@ -1099,7 +1099,7 @@ function addPointsOfInterest(): void {
       minzoom: 15,
       filter: [
         "all",
-        ["has", "name"],
+        ["any", ["has", "name"], ["has", "name_en"]],
         ["in", ["get", "class"], ["literal", [
           "park", "garden", "nature_reserve", "school", "college", "university", "kindergarten", "library",
           "bus", "railway", "subway", "tram", "ferry", "airport",
@@ -1156,6 +1156,9 @@ function togglePointsOfInterest(): void {
 function disableTerrain(): void {
   if (!terrainEnabled) return;
   map.setTerrain(null);
+  if (map.getLayer("juju-hillshade")) map.removeLayer("juju-hillshade");
+  if (map.getSource("juju-hillshade-source")) map.removeSource("juju-hillshade-source");
+  if (map.getSource("juju-terrain")) map.removeSource("juju-terrain");
   terrainEnabled = false;
   $("#terrain-view").classList.remove("active");
 }
