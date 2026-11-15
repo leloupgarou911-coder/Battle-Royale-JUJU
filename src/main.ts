@@ -1574,14 +1574,21 @@ function updateGameHud(): void {
   updateGameZone(center.lng, center.lat);
 }
 
+function metersToScreenPixels(lng: number, lat: number, meters: number): number {
+  const origin = map.project([lng, lat]);
+  const east = destinationFromDirection({ lng, lat }, { x: 1, y: 0 }, meters);
+  const projectedEast = map.project([east.lng, east.lat]);
+  return Math.hypot(projectedEast.x - origin.x, projectedEast.y - origin.y);
+}
+
 function isBuildingCollision(lng: number, lat: number): boolean {
   const point = map.project([lng, lat]);
-  if (map.getLayer("juju-collision-buildings") && map.getZoom() >= 15) {
-    const radius = 12;
+  const playerRadius = Math.max(2, Math.min(12, metersToScreenPixels(lng, lat, 5)));
+  if (map.getLayer("juju-collision-buildings") && map.getZoom() >= 14) {
     const samples: [number, number][] = [
-      [0, 0], [radius, 0], [-radius, 0], [0, radius], [0, -radius],
-      [radius * 0.7, radius * 0.7], [-radius * 0.7, radius * 0.7],
-      [radius * 0.7, -radius * 0.7], [-radius * 0.7, -radius * 0.7],
+      [0, 0], [playerRadius, 0], [-playerRadius, 0], [0, playerRadius], [0, -playerRadius],
+      [playerRadius * 0.7, playerRadius * 0.7], [-playerRadius * 0.7, playerRadius * 0.7],
+      [playerRadius * 0.7, -playerRadius * 0.7], [-playerRadius * 0.7, -playerRadius * 0.7],
     ];
     const buildingHit = samples.some(([dx, dy]) => map.queryRenderedFeatures(
       [point.x + dx, point.y + dy],
@@ -1589,13 +1596,25 @@ function isBuildingCollision(lng: number, lat: number): boolean {
     ).length > 0);
     if (buildingHit) return true;
   }
-  // Procedural trees and rocks must collide at every game zoom level.
+
+  // Check neighbouring procedural zones too, so an obstacle on a zone edge cannot be crossed.
   const zone = zoneFor(lng, lat);
-  return createZoneObstacles(zone.x, zone.y).features.some((feature) => {
-    const obstaclePoint = map.project(feature.geometry.coordinates as [number, number]);
-    const radius = feature.properties?.kind === "tree" ? 17 : 13;
-    return Math.hypot(obstaclePoint.x - point.x, obstaclePoint.y - point.y) < radius;
-  });
+  const checkedZones = new Set<string>();
+  for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+    for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+      const neighbour = zoneAtOffset(zone.x, zone.y, offsetX, offsetY);
+      if (checkedZones.has(neighbour.key)) continue;
+      checkedZones.add(neighbour.key);
+      for (const feature of createZoneObstacles(neighbour.x, neighbour.y).features) {
+        const obstacleCoordinates = feature.geometry.coordinates as [number, number];
+        const obstaclePoint = map.project(obstacleCoordinates);
+        const obstacleRadiusMeters = Number(feature.properties?.radius) || 10;
+        const obstacleRadius = metersToScreenPixels(obstacleCoordinates[0], obstacleCoordinates[1], obstacleRadiusMeters);
+        if (Math.hypot(obstaclePoint.x - point.x, obstaclePoint.y - point.y) < playerRadius + obstacleRadius) return true;
+      }
+    }
+  }
+  return false;
 }
 
 type BuildingKind = "house" | "apartment" | "school" | "shop" | "office" | "industrial" | "other";
