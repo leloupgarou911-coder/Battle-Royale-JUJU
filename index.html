@@ -9,8 +9,8 @@
   </head>
   <body>
     <main id="app">
-      <div id="map" aria-label="Interactive world map"></div>
-      <section id="home-screen" class="home-screen" aria-label="JUJU WORLD main menu">
+      <div id="map" data-i18n-aria="mapAriaLabel" aria-label="Interactive world map"></div>
+      <section id="home-screen" class="home-screen" data-i18n-aria="homeAriaLabel" aria-label="JUJU WORLD main menu">
         <div class="home-atmosphere" aria-hidden="true"><span class="home-orbit home-orbit-one"></span><span class="home-orbit home-orbit-two"></span><span class="home-grid"></span></div>
         <div class="home-topbar">
           <a class="home-brand" href="./" aria-label="JUJU WORLD"><span class="home-brand-mark">J</span><span><strong>JUJU <i>WORLD</i></strong><small>EXPLORE BEYOND THE MAP</small></span></a>
@@ -64,7 +64,7 @@
           <form id="search-form" class="search-box">
             <span class="search-icon" aria-hidden="true">⌕</span>
             <input id="place-search" type="search" autocomplete="off" placeholder="Search a city or a place..." data-i18n-aria="searchAriaLabel" aria-label="Search a city or a place" />
-            <button type="submit" aria-label="Search">↵</button>
+            <button type="submit" data-i18n-aria="searchButtonAria" aria-label="Search">↵</button>
           </form>
           <div id="search-results" class="search-results" aria-live="polite"></div>
 
@@ -143,7 +143,7 @@
         </div>
       </section>
 
-      <section id="resume-session" class="resume-session" hidden data-i18n-aria="saveSlotsTitle" aria-label="Saved game sessions">
+      <section id="resume-session" class="resume-session" hidden data-i18n-aria="saveSlotsAria" aria-label="Saved game sessions">
         <strong data-i18n="saveSlotsTitle">SAVED EXPLORATIONS</strong>
         <p data-i18n="saveSlotsDescription">Choose a save to continue or create a new one.</p>
         <div class="save-slot-create">
