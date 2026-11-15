@@ -180,3 +180,21 @@ h1 span { color: var(--gold); }
 }
 .game-touch-controls button:active { background: rgba(228,183,127,.35); }
 @media (pointer: coarse) { .game-mode .game-touch-controls { display: flex; } }
+
+
+/* Continuous movement, facing and speed controls */
+.juju-player { --facing: 0deg; }
+.juju-player[data-direction="up"] { --facing: 0deg; }
+.juju-player[data-direction="right"] { --facing: 90deg; }
+.juju-player[data-direction="down"] { --facing: 180deg; }
+.juju-player[data-direction="left"] { --facing: -90deg; }
+.juju-player.is-moving { animation: juju-walk .16s ease-in-out infinite alternate; }
+@keyframes juju-walk {
+  from { transform: translateY(0) rotate(calc(var(--facing, 0deg) - 4deg)); }
+  to { transform: translateY(-3px) rotate(calc(var(--facing, 0deg) + 4deg)); }
+}
+.game-speed-control { display: grid; gap: 7px; margin: 10px 0 4px; }
+.game-speed-control label { display: flex; justify-content: space-between; color: #aeb9bf; font: 700 8px "DM Sans", sans-serif; letter-spacing: .1em; }
+.game-speed-control label strong { color: var(--gold); font-variant-numeric: tabular-nums; }
+.game-speed-control input { width: 100%; accent-color: #e4b77f; cursor: pointer; }
+.game-touch-controls button { touch-action: none; user-select: none; -webkit-user-select: none; }
