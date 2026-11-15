@@ -138,7 +138,9 @@ export class Game {
         const meshGeometry = new THREE.ExtrudeGeometry(shape, { depth: height - base, bevelEnabled: false, curveSegments: 1 });
         meshGeometry.rotateX(-Math.PI / 2);
         const building = new THREE.Mesh(meshGeometry, material);
-        building.position.y = base;
+        const centreX = points.reduce((sum, point) => sum + point[0], 0) / points.length;
+        const centreZ = points.reduce((sum, point) => sum + point[1], 0) / points.length;
+        building.position.y = base + this.terrainHeightAt(centreX, centreZ);
         building.castShadow = true;
         building.receiveShadow = true;
         this.scene.add(building);
@@ -219,8 +221,9 @@ export class Game {
           const length = Math.hypot(dx, dz) || 1;
           const ox = (-dz / length) * width * 0.5;
           const oz = (dx / length) * width * 0.5;
-          vertices.push(points[i][0] + ox, 0.055, points[i][1] + oz);
-          vertices.push(points[i][0] - ox, 0.055, points[i][1] - oz);
+          const roadY = this.terrainHeightAt(points[i][0], points[i][1]) + 0.075;
+          vertices.push(points[i][0] + ox, roadY, points[i][1] + oz);
+          vertices.push(points[i][0] - ox, roadY, points[i][1] - oz);
           if (i > 0) {
             const a = (i - 1) * 2;
             indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
