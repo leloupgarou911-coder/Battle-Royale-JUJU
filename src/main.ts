@@ -25,6 +25,7 @@ const translations = {
     streamingPerformance: "PERFORMANCE",
     streamingOffline: "OFFLINE",
     exploredZones: "VISITED",
+    miniMapTitle: "MINI-MAP", miniMapPlayer: "YOU",
     clearExplored: "CLEAR VISITED ZONES",
     exploredCleared: "Local exploration history cleared.",
     resumeTitle: "RESUME YOUR SESSION?",
@@ -143,6 +144,7 @@ const translations = {
     streamingPerformance: "PERFORMANCES",
     streamingOffline: "HORS LIGNE",
     exploredZones: "VISITÉES",
+    miniMapTitle: "MINI-CARTE", miniMapPlayer: "VOUS",
     clearExplored: "EFFACER LES ZONES VISITÉES",
     exploredCleared: "Historique local des explorations effacé.",
     resumeTitle: "REPRENDRE VOTRE SESSION ?",
@@ -748,6 +750,7 @@ function updateExploredZonesLayer(): void {
   source.setData({ type: "FeatureCollection", features });
   const count = document.querySelector<HTMLElement>("#game-explored-count");
   if (count) count.textContent = String(exploredZones.size);
+  updateMiniMapOverlays();
 }
 function recordExploredZone(zoneX: number, zoneY: number): void {
   const key = `${zoneX}:${zoneY}`;
@@ -792,6 +795,112 @@ const map: MapLibreMap = new maplibregl.Map({
   pitchWithRotate: false,
   touchPitch: false,
 });
+
+
+let miniMap: MapLibreMap | null = null;
+let miniMapReady = false;
+let lastMiniMapSyncAt = 0;
+let miniMapOverlaySignature = "";
+
+function updateMiniMapOverlays(): void {
+  if (!miniMap || !miniMapReady) return;
+  const active = zoneFor(map.getCenter().lng, map.getCenter().lat);
+  const signature = `${active.key}|${[...exploredZones.keys()].join(",")}`;
+  if (signature === miniMapOverlaySignature) return;
+  miniMapOverlaySignature = signature;
+  const activeSource = miniMap.getSource("juju-mini-active-zone") as maplibregl.GeoJSONSource | undefined;
+  activeSource?.setData(zonePolygon(active.x, active.y));
+  const visitedSource = miniMap.getSource("juju-mini-visited-zones") as maplibregl.GeoJSONSource | undefined;
+  visitedSource?.setData({
+    type: "FeatureCollection",
+    features: [...exploredZones.values()].map((zone) => ({
+      ...zonePolygon(zone.x, zone.y),
+      properties: { visitedAt: zone.visitedAt },
+    })),
+  });
+}
+
+function syncMiniMap(force = false): void {
+  if (!gameMode || !miniMap) return;
+  const now = performance.now();
+  if (!force && now - lastMiniMapSyncAt < 140) return;
+  lastMiniMapSyncAt = now;
+  const center = map.getCenter();
+  miniMap.jumpTo({
+    center,
+    zoom: Math.max(10, Math.min(16, map.getZoom() - 2.5)),
+    bearing: 0,
+    pitch: 0,
+  });
+  const coordinates = document.querySelector<HTMLElement>("#mini-map-coordinates");
+  if (coordinates) coordinates.textContent = `${center.lat.toFixed(3)}, ${center.lng.toFixed(3)}`;
+  updateMiniMapOverlays();
+}
+
+function createMiniMap(): void {
+  if (miniMap) {
+    requestAnimationFrame(() => miniMap?.resize());
+    syncMiniMap(true);
+    return;
+  }
+  miniMap = new maplibregl.Map({
+    container: "game-mini-map",
+    style: "https://tiles.openfreemap.org/styles/liberty",
+    center: map.getCenter(),
+    zoom: Math.max(10, Math.min(16, map.getZoom() - 2.5)),
+    minZoom: 9,
+    maxZoom: 17,
+    attributionControl: false,
+    interactive: false,
+    renderWorldCopies: false,
+    maxTileCacheSize: 48,
+    maxTileCacheZoomLevels: 3,
+    pitch: 0,
+    bearing: 0,
+  });
+  miniMap.on("load", () => {
+    if (!miniMap) return;
+    miniMap.addSource("juju-mini-active-zone", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    miniMap.addLayer({
+      id: "juju-mini-active-fill",
+      type: "fill",
+      source: "juju-mini-active-zone",
+      paint: { "fill-color": "#79d9d0", "fill-opacity": 0.14 },
+    });
+    miniMap.addLayer({
+      id: "juju-mini-active-outline",
+      type: "line",
+      source: "juju-mini-active-zone",
+      paint: { "line-color": "#9af1e6", "line-width": 2.2, "line-opacity": 0.98 },
+    });
+    miniMap.addSource("juju-mini-visited-zones", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    miniMap.addLayer({
+      id: "juju-mini-visited-outline",
+      type: "line",
+      source: "juju-mini-visited-zones",
+      paint: {
+        "line-color": "#79d9a8",
+        "line-width": 1.3,
+        "line-opacity": 0.85,
+        "line-dasharray": [2, 2],
+      },
+    });
+    miniMapReady = true;
+    miniMapOverlaySignature = "";
+    syncMiniMap(true);
+  });
+  miniMap.on("error", (event) => {
+    if (event.error) console.warn("Mini-map resource error:", event.error.message);
+  });
+}
+
+
 
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
 map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
@@ -1770,6 +1879,7 @@ function closeBuildingInterior(): void {
 
 function startGameMode(resumeSession: SavedGameSession | null = null): void {
   gameMode = true;
+  createMiniMap();
   heldDirections.clear();
   disableTerrain();
   map.setProjection({ type: "mercator" });
@@ -1957,6 +2067,7 @@ function setMapView(view: "flat" | "globe"): void {
   $("#globe-view").classList.toggle("active", !isFlat);
 }
 
+map.on("move", () => { if (gameMode) syncMiniMap(); });
 map.on("moveend", () => { if (gameMode) updateGameHud(); });
 
 const networkInfo = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
