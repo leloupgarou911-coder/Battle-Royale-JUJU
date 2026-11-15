@@ -450,7 +450,7 @@ function loadSavedGameSlots(): void {
           missionHistory: Array.isArray(item.missionHistory) ? item.missionHistory.filter((entry) => entry && typeof entry.id === "string" && typeof entry.date === "string" && Number.isFinite(entry.completedAt) && Number.isFinite(entry.rewardXp)).slice(-100) : [],
           session: {
             ...item.session,
-            movementSpeed: Math.max(80, Math.min(360, item.session.movementSpeed)),
+            movementSpeed: item.session.movementSpeed > 12 ? 4.5 : Math.max(1, Math.min(12, item.session.movementSpeed)),
             zoom: Math.max(15, Math.min(19, item.session.zoom)),
           },
         })).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, SAVE_SLOT_LIMIT);
@@ -1894,11 +1894,11 @@ function startGameMode(resumeSession: SavedGameSession | null = null): void {
     : spawnForZone(currentZone.x, currentZone.y);
   const spawn = new maplibregl.LngLat(spawnCoordinates[0], spawnCoordinates[1]);
   if (resumeSession) {
-    movementSpeed = resumeSession.movementSpeed;
+    movementSpeed = resumeSession.movementSpeed > 12 ? 4.5 : Math.max(1, Math.min(12, resumeSession.movementSpeed));
     const speedControl = document.querySelector<HTMLInputElement>("#game-speed");
     const speedValue = document.querySelector<HTMLElement>("#game-speed-value");
     if (speedControl) speedControl.value = String(movementSpeed);
-    if (speedValue) speedValue.textContent = String(movementSpeed);
+    if (speedValue) speedValue.textContent = movementSpeed.toFixed(1);
   }
   ensureGameLayers();
   setGameWorldVisibility(true);
@@ -2242,7 +2242,7 @@ const speedControl = $("#game-speed") as HTMLInputElement;
 const speedValue = $("#game-speed-value");
 speedControl.addEventListener("input", () => {
   movementSpeed = Number(speedControl.value);
-  speedValue.textContent = String(movementSpeed);
+  speedValue.textContent = movementSpeed.toFixed(1);
 });
 
 $("#game-clear-explored").addEventListener("click", clearExploredZones);
