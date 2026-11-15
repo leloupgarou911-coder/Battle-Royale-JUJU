@@ -849,14 +849,14 @@ function setLanguage(next: Language): void {
     const element = document.querySelector<HTMLElement>(selector);
     if (element) html ? element.innerHTML = value : element.textContent = value;
   };
-  setHomeText(".home-copy .home-kicker", homeText.kicker);
+  setHomeText(".home-copy .home-kicker", '<span></span>' + homeText.kicker, true);
   setHomeText(".home-copy h1", homeText.title, true);
   setHomeText(".home-description", homeText.description);
   setHomeText("#home-play", homeText.play, true);
   setHomeText("#home-saves", homeText.saves, true);
   setHomeText("#home-settings", homeText.settings);
   setHomeText("#home-profile", homeText.profile);
-  setHomeText(".home-world-label", homeText.world);
+  setHomeText(".home-world-label-title", homeText.world);
   setHomeText(".home-world-caption", homeText.worldCaption, true);
   setHomeText(".home-world-footer span:first-child", homeText.global);
   setHomeText(".home-world-footer span:last-child", homeText.footer);
