@@ -89,6 +89,21 @@
         </div>
       </section>
 
+      <section id="building-interior" class="interior-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="interior-title">
+        <div class="interior-panel">
+          <div class="interior-kicker">JUJU WORLD · EXPLORATION</div>
+          <h2 id="interior-title">Explorable interior</h2>
+          <p id="interior-building-name" class="interior-building-name"></p>
+          <p id="interior-note" class="interior-note"></p>
+          <div class="interior-floorplan" aria-label="Fictional interior layout">
+            <div id="interior-hall" class="interior-room room-hall">Entrance hall</div>
+            <div id="interior-room" class="interior-room room-main">Main room</div>
+            <div id="interior-storage" class="interior-room room-side">Side room</div>
+          </div>
+          <button id="interior-exit" class="interior-exit" type="button">LEAVE BUILDING</button>
+        </div>
+      </section>
+
       <section class="game-hud" aria-label="Game controls">
         <div class="game-hud-top"><span class="game-hud-brand">JUJU <b>GAME MODE</b></span><span id="game-player-status">PLAYER READY</span></div>
         <div class="game-hud-stats"><div><small>ACTIVE ZONE</small><strong id="game-zone-status">ZONE READY</strong><span id="game-zone-coordinates">0.000, 0.000</span></div><div><small>PLAYER</small><strong>TOP-DOWN</strong><span data-i18n="moveHelp">WASD / ARROWS TO MOVE</span></div></div>
