@@ -47,6 +47,18 @@ const translations = {
     poiZoomNote: "Visible when you zoom into a city (zoom 13+).",
     poiUnnamed: "Unnamed place",
     poiDetails: "Mapped place · OpenStreetMap data",
+    buildingFallback: "Mapped building",
+    virtualEntrance: "VIRTUAL GAME ENTRANCE",
+    enterBuilding: "ENTER",
+    interiorTitle: "Explorable interior",
+    interiorNote: "Fictional game interior. The real map provides only the building footprint.",
+    interiorHall: "Entrance hall",
+    interiorRoom: "Main room",
+    interiorStorage: "Side room",
+    closeInterior: "LEAVE BUILDING",
+    natureTitle: "Outdoor area",
+    treeInfo: "Decorative tree · blocks movement",
+    rockInfo: "Decorative rock · blocks movement",
   },
   fr: {
     eyebrow: "LE MONDE EST VOTRE TERRAIN DE JEU",
@@ -90,6 +102,18 @@ const translations = {
     poiZoomNote: "Visible en zoomant sur une ville (niveau 13+).",
     poiUnnamed: "Lieu sans nom",
     poiDetails: "Lieu cartographié · Données OpenStreetMap",
+    buildingFallback: "Bâtiment cartographié",
+    virtualEntrance: "ENTRÉE VIRTUELLE DU JEU",
+    enterBuilding: "ENTRER",
+    interiorTitle: "Intérieur explorable",
+    interiorNote: "Intérieur fictif créé pour le jeu. La carte réelle fournit uniquement l’emprise du bâtiment.",
+    interiorHall: "Hall d’entrée",
+    interiorRoom: "Pièce principale",
+    interiorStorage: "Pièce annexe",
+    closeInterior: "SORTIR DU BÂTIMENT",
+    natureTitle: "Espace extérieur",
+    treeInfo: "Arbre décoratif · bloque le déplacement",
+    rockInfo: "Rocher décoratif · bloque le déplacement",
   },
 } as const;
 
@@ -111,6 +135,8 @@ let toastTimeout = 0;
 let selectedPlaceMarker: maplibregl.Marker | null = null;
 let gameMode = false;
 let playerMarker: maplibregl.Marker | null = null;
+let virtualEntranceMarker: maplibregl.Marker | null = null;
+let selectedBuildingName = "";
 let activeZoneKey = "";
 const GAME_ZONE_METERS = 750;
 const WORLD_METERS = 40075016.68557849;
@@ -651,6 +677,26 @@ function isBuildingCollision(lng: number, lat: number): boolean {
   });
 }
 
+function openBuildingInterior(): void {
+  if (!gameMode) return;
+  const modal = $("#building-interior");
+  $("#interior-building-name").textContent = selectedBuildingName;
+  $("#interior-title").textContent = translations[language].interiorTitle;
+  $("#interior-note").textContent = translations[language].interiorNote;
+  $("#interior-hall").textContent = translations[language].interiorHall;
+  $("#interior-room").textContent = translations[language].interiorRoom;
+  $("#interior-storage").textContent = translations[language].interiorStorage;
+  $("#interior-exit").textContent = translations[language].closeInterior;
+  modal.hidden = false;
+  stopMovementLoop();
+}
+
+function closeBuildingInterior(): void {
+  $("#building-interior").hidden = true;
+  virtualEntranceMarker?.remove();
+  virtualEntranceMarker = null;
+}
+
 function startGameMode(): void {
   gameMode = true;
   heldDirections.clear();
@@ -857,6 +903,13 @@ $("#language-toggle").addEventListener("click", () => {
 $("#flat-view").addEventListener("click", () => setMapView("flat"));
 $("#game-camera").addEventListener("click", setGameCamera);
 $("#game-mode-toggle").addEventListener("click", () => gameMode ? stopGameMode() : startGameMode());
+$("#interior-exit").addEventListener("click", closeBuildingInterior);
+$("#building-interior").addEventListener("click", (event) => {
+  if (event.target === $("#building-interior")) closeBuildingInterior();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !$("#building-interior").hidden) closeBuildingInterior();
+});
 $("#game-zone-reload").addEventListener("click", () => {
   if (!gameMode) return;
   map.resize();
@@ -950,11 +1003,53 @@ $("#terrain-view").addEventListener("click", () => {
 $("#places-view").addEventListener("click", togglePointsOfInterest);
 
 map.on("click", (event) => {
+  if (gameMode) {
+    const building = map.getLayer("juju-game-buildings")
+      ? map.queryRenderedFeatures(event.point, { layers: ["juju-game-buildings"] })[0]
+      : undefined;
+    if (building) {
+      const props = building.properties ?? {};
+      selectedBuildingName = String(props.name ?? props.name_en ?? translations[language].buildingFallback);
+      virtualEntranceMarker?.remove();
+      const entrance = document.createElement("button");
+      entrance.type = "button";
+      entrance.className = "virtual-entrance-marker";
+      entrance.textContent = translations[language].enterBuilding;
+      entrance.setAttribute("aria-label", translations[language].virtualEntrance);
+      entrance.addEventListener("click", (clickEvent) => {
+        clickEvent.stopPropagation();
+        openBuildingInterior();
+      });
+      virtualEntranceMarker = new maplibregl.Marker({ element: entrance, anchor: "bottom" })
+        .setLngLat(event.lngLat)
+        .addTo(map);
+      showToast(translations[language].virtualEntrance + " · " + selectedBuildingName);
+      return;
+    }
+
+    const obstacleLayers = ["juju-zone-trees", "juju-zone-rocks"].filter((id) => map.getLayer(id));
+    const obstacle = obstacleLayers.length
+      ? map.queryRenderedFeatures(event.point, { layers: obstacleLayers })[0]
+      : undefined;
+    if (obstacle) {
+      const kind = String(obstacle.properties?.kind ?? "tree");
+      const content = document.createElement("div");
+      content.className = "poi-popup";
+      const title = document.createElement("strong");
+      title.textContent = translations[language].natureTitle;
+      const detail = document.createElement("span");
+      detail.textContent = kind === "rock" ? translations[language].rockInfo : translations[language].treeInfo;
+      content.append(title, detail);
+      new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "250px" })
+        .setLngLat(event.lngLat).setDOMContent(content).addTo(map);
+      return;
+    }
+  }
+
   if (!placesVisible || !map.getLayer("juju-poi-points")) return;
   const features = map.queryRenderedFeatures(event.point, { layers: ["juju-poi-points"] });
   const feature = features[0];
   if (!feature) return;
-
   const properties = feature.properties ?? {};
   const className = String(properties.class ?? "");
   const placeName = String(properties.name ?? properties.name_en ?? translations[language].poiUnnamed);
@@ -969,12 +1064,16 @@ map.on("click", (event) => {
   source.textContent = translations[language].poiDetails;
   content.append(title, type, source);
   new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "260px" })
-    .setLngLat(event.lngLat)
-    .setDOMContent(content)
-    .addTo(map);
+    .setLngLat(event.lngLat).setDOMContent(content).addTo(map);
 });
 
 map.on("mousemove", (event) => {
+  if (gameMode) {
+    const gameLayers = ["juju-game-buildings", "juju-zone-trees", "juju-zone-rocks"].filter((id) => map.getLayer(id));
+    const overGameObject = gameLayers.length && map.queryRenderedFeatures(event.point, { layers: gameLayers }).length > 0;
+    map.getCanvas().style.cursor = overGameObject ? "pointer" : "";
+    return;
+  }
   const hasPoiLayer = map.getLayer("juju-poi-points");
   const overPoi = placesVisible && hasPoiLayer
     ? map.queryRenderedFeatures(event.point, { layers: ["juju-poi-points"] }).length > 0
