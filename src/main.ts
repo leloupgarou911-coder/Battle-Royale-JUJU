@@ -1881,6 +1881,10 @@ function closeBuildingInterior(): void {
 }
 
 function startGameMode(resumeSession: SavedGameSession | null = null): void {
+  if (!map.loaded()) {
+    showToast(language === "en" ? "The world map is still loading. Please wait a moment." : "La carte du monde est en cours de chargement. Patientez un instant.");
+    return;
+  }
   gameMode = true;
   createMiniMap();
   heldDirections.clear();
@@ -1889,7 +1893,11 @@ function startGameMode(resumeSession: SavedGameSession | null = null): void {
   map.setPitch(0);
   map.setBearing(0);
   map.dragRotate.disable();
-  map.touchZoomRotate.disableRotation();
+  map.dragPan.disable();
+  map.scrollZoom.disable();
+  map.doubleClickZoom.disable();
+  map.keyboard.disable();
+  map.touchZoomRotate.disable();
   const current = map.getCenter();
   const currentZone = zoneFor(current.lng, current.lat);
   const spawnCoordinates = resumeSession
@@ -1950,6 +1958,14 @@ function stopGameMode(): void {
   playerMarker = null;
   $("#app").classList.remove("game-mode");
   $("#game-mode-toggle").textContent = translations[language].enterGame;
+  virtualEntranceMarker?.remove();
+  virtualEntranceMarker = null;
+  map.dragPan.enable();
+  map.scrollZoom.enable();
+  map.doubleClickZoom.enable();
+  map.keyboard.enable();
+  map.touchZoomRotate.enable();
+  map.touchZoomRotate.disableRotation();
   map.easeTo({ pitch: 0, bearing: 0, duration: 400 });
 }
 
