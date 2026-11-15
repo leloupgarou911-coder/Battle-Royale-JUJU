@@ -30,6 +30,9 @@ const translations = {
     resumeTitle: "RESUME YOUR SESSION?",
     resumeContinue: "RESUME",
     resumeNew: "NEW EXPLORATION",
+    saveSlotsTitle: "SAVED EXPLORATIONS",
+    saveSlotsDescription: "Choose a save to continue or create a new one.",
+    saveSlotCreate: "SAVE CURRENT",
     moveHelp: "WASD / ARROWS TO MOVE",
     playerReady: "PLAYER READY",
     globe: "3D GLOBE",
@@ -142,6 +145,9 @@ const translations = {
     resumeTitle: "REPRENDRE VOTRE SESSION ?",
     resumeContinue: "REPRENDRE",
     resumeNew: "NOUVELLE EXPLORATION",
+    saveSlotsTitle: "EXPLORATIONS SAUVEGARDÉES",
+    saveSlotsDescription: "Choisissez une sauvegarde ou créez-en une nouvelle.",
+    saveSlotCreate: "ENREGISTRER",
     moveHelp: "ZQSD / FLÈCHES POUR BOUGER",
     playerReady: "JOUEUR PRÊT",
     globe: "GLOBE 3D",
@@ -297,7 +303,9 @@ const pendingVectorTiles = new Set<string>();
 const zoneObstacleCache = new Map<string, GeoJSON.FeatureCollection<GeoJSON.Point>>();
 const EXPLORED_STORAGE_KEY = "juju-world-explored-zones-v1";
 const SESSION_STORAGE_KEY = "juju-world-session-v1";
+const SAVE_SLOTS_STORAGE_KEY = "juju-world-save-slots-v1";
 const SESSION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+const SAVE_SLOT_LIMIT = 10;
 interface SavedGameSession {
   lng: number;
   lat: number;
@@ -307,79 +315,206 @@ interface SavedGameSession {
   zoom: number;
   savedAt: number;
 }
+interface SavedGameSlot {
+  id: string;
+  name: string;
+  session: SavedGameSession;
+  createdAt: number;
+  updatedAt: number;
+}
+let savedGameSlots: SavedGameSlot[] = [];
+let activeSaveSlotId: string | null = null;
 let savedGameSession: SavedGameSession | null = null;
 let lastSessionSaveAt = 0;
-function readSavedGameSession(): SavedGameSession | null {
+function validGameSession(value: unknown): value is SavedGameSession {
+  if (!value || typeof value !== "object") return false;
+  const session = value as Partial<SavedGameSession>;
+  return Number.isFinite(session.lng) && (session.lng as number) >= -180 && (session.lng as number) <= 180
+    && Number.isFinite(session.lat) && (session.lat as number) >= -85.051129 && (session.lat as number) <= 85.051129
+    && Number.isInteger(session.zoneX) && Number.isInteger(session.zoneY)
+    && Number.isFinite(session.movementSpeed) && Number.isFinite(session.zoom)
+    && Number.isFinite(session.savedAt) && (session.savedAt as number) <= Date.now()
+    && Date.now() - (session.savedAt as number) <= SESSION_MAX_AGE_MS;
+}
+function loadSavedGameSlots(): void {
   try {
-    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
-    if (!raw) return null;
-    const value = JSON.parse(raw) as Partial<SavedGameSession>;
-    if (!Number.isFinite(value.lng) || !Number.isFinite(value.lat)
-      || !Number.isInteger(value.zoneX) || !Number.isInteger(value.zoneY)
-      || !Number.isFinite(value.movementSpeed) || !Number.isFinite(value.zoom)
-      || !Number.isFinite(value.savedAt)) return null;
-    if ((value.lng as number) < -180 || (value.lng as number) > 180
-      || (value.lat as number) < -85.051129 || (value.lat as number) > 85.051129
-      || (value.savedAt as number) > Date.now()
-      || Date.now() - (value.savedAt as number) > SESSION_MAX_AGE_MS) {
-      localStorage.removeItem(SESSION_STORAGE_KEY);
-      return null;
+    const raw = localStorage.getItem(SAVE_SLOTS_STORAGE_KEY);
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        savedGameSlots = parsed.filter((item): item is SavedGameSlot =>
+          !!item && typeof item.id === "string" && typeof item.name === "string"
+          && validGameSession(item.session) && Number.isFinite(item.createdAt)
+          && Number.isFinite(item.updatedAt)
+        ).map((item) => ({
+          ...item,
+          name: item.name.trim().slice(0, 32) || "Exploration",
+          session: {
+            ...item.session,
+            movementSpeed: Math.max(80, Math.min(360, item.session.movementSpeed)),
+            zoom: Math.max(15, Math.min(19, item.session.zoom)),
+          },
+        })).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, SAVE_SLOT_LIMIT);
+      }
+    } else {
+      const legacyRaw = localStorage.getItem(SESSION_STORAGE_KEY);
+      if (legacyRaw) {
+        const legacy: unknown = JSON.parse(legacyRaw);
+        if (validGameSession(legacy)) {
+          const now = Date.now();
+          savedGameSlots = [{
+            id: "legacy-" + now,
+            name: "Exploration 1",
+            session: legacy,
+            createdAt: legacy.savedAt,
+            updatedAt: legacy.savedAt,
+          }];
+          persistSavedGameSlots();
+        }
+        localStorage.removeItem(SESSION_STORAGE_KEY);
+      }
     }
-    return {
-      lng: value.lng as number,
-      lat: value.lat as number,
-      zoneX: value.zoneX as number,
-      zoneY: value.zoneY as number,
-      movementSpeed: Math.max(80, Math.min(360, value.movementSpeed as number)),
-      zoom: Math.max(15, Math.min(19, value.zoom as number)),
-      savedAt: value.savedAt as number,
-    };
   } catch (error) {
-    console.warn("Could not read saved game session:", error);
-    return null;
+    console.warn("Could not load local save slots:", error);
+    savedGameSlots = [];
   }
 }
-function saveGameSession(force = false): void {
-  if (!gameMode || !playerMarker) return;
-  const now = Date.now();
-  if (!force && now - lastSessionSaveAt < 1800) return;
-  const position = playerMarker.getLngLat();
+function persistSavedGameSlots(): void {
+  try {
+    localStorage.setItem(SAVE_SLOTS_STORAGE_KEY, JSON.stringify(savedGameSlots));
+  } catch (error) {
+    console.warn("Could not persist local save slots:", error);
+    showToast(language === "en" ? "Local save storage is unavailable." : "Stockage local indisponible.");
+  }
+}
+function currentSessionSnapshot(): SavedGameSession {
+  const position = playerMarker?.getLngLat() ?? map.getCenter();
   const zone = zoneFor(position.lng, position.lat);
-  const session: SavedGameSession = {
+  return {
     lng: position.lng,
     lat: position.lat,
     zoneX: zone.x,
     zoneY: zone.y,
     movementSpeed,
-    zoom: map.getZoom(),
-    savedAt: now,
+    zoom: Math.max(15, Math.min(19, map.getZoom())),
+    savedAt: Date.now(),
   };
-  try {
-    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-    savedGameSession = session;
-    lastSessionSaveAt = now;
-  } catch (error) {
-    console.warn("Could not save game session:", error);
-  }
 }
-function clearSavedGameSession(): void {
-  savedGameSession = null;
-  try {
-    localStorage.removeItem(SESSION_STORAGE_KEY);
-  } catch (error) {
-    console.warn("Could not clear saved game session:", error);
+function saveGameSession(force = false): void {
+  if (!gameMode || !playerMarker) return;
+  const now = Date.now();
+  if (!force && now - lastSessionSaveAt < 1800) return;
+  const session = currentSessionSnapshot();
+  let slot = savedGameSlots.find((item) => item.id === activeSaveSlotId);
+  if (!slot) {
+    slot = {
+      id: `save-${now}-${Math.random().toString(36).slice(2, 7)}`,
+      name: `${language === "fr" ? "Exploration" : "Exploration"} ${savedGameSlots.length + 1}`,
+      session,
+      createdAt: now,
+      updatedAt: now,
+    };
+    savedGameSlots.unshift(slot);
+    activeSaveSlotId = slot.id;
+  } else {
+    slot.session = session;
+    slot.updatedAt = now;
+    savedGameSlots = [slot, ...savedGameSlots.filter((item) => item.id !== slot!.id)];
   }
+  savedGameSlots = savedGameSlots.slice(0, SAVE_SLOT_LIMIT);
+  savedGameSession = session;
+  persistSavedGameSlots();
+  lastSessionSaveAt = now;
+  renderSavedGameSlots();
+}
+function createNamedSaveSlot(): void {
+  const input = document.querySelector<HTMLInputElement>("#save-slot-name");
+  const name = input?.value.trim().slice(0, 32);
+  if (!name) {
+    showToast(language === "en" ? "Enter a name for this save." : "Donnez un nom à cette sauvegarde.");
+    input?.focus();
+    return;
+  }
+  const now = Date.now();
+  const session = currentSessionSnapshot();
+  const slot: SavedGameSlot = {
+    id: `save-${now}-${Math.random().toString(36).slice(2, 7)}`,
+    name,
+    session,
+    createdAt: now,
+    updatedAt: now,
+  };
+  savedGameSlots.unshift(slot);
+  savedGameSlots = savedGameSlots.slice(0, SAVE_SLOT_LIMIT);
+  activeSaveSlotId = slot.id;
+  savedGameSession = session;
+  persistSavedGameSlots();
+  if (input) input.value = "";
+  renderSavedGameSlots();
+  showToast(language === "en" ? "New save created." : "Nouvelle sauvegarde créée.");
+}
+function resumeSavedSlot(slotId: string): void {
+  const slot = savedGameSlots.find((item) => item.id === slotId);
+  if (!slot) return;
+  activeSaveSlotId = slot.id;
+  savedGameSession = slot.session;
+  startGameMode(slot.session);
+}
+function deleteSavedSlot(slotId: string): void {
+  savedGameSlots = savedGameSlots.filter((item) => item.id !== slotId);
+  if (activeSaveSlotId === slotId) {
+    activeSaveSlotId = null;
+    savedGameSession = null;
+  }
+  persistSavedGameSlots();
+  renderSavedGameSlots();
+}
+function renderSavedGameSlots(): void {
+  const list = document.querySelector<HTMLElement>("#save-slots-list");
+  const panel = document.querySelector<HTMLElement>("#resume-session");
+  if (!list || !panel) return;
+  list.replaceChildren();
+  savedGameSlots.forEach((slot) => {
+    const item = document.createElement("article");
+    item.className = "save-slot-card";
+    const info = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = slot.name;
+    const meta = document.createElement("span");
+    const date = new Date(slot.updatedAt).toLocaleString(language === "fr" ? "fr-FR" : "en-GB");
+    meta.textContent = `${language === "fr" ? "Zone" : "Zone"} ${slot.session.zoneX}, ${slot.session.zoneY} · ${date}`;
+    const progress = document.createElement("small");
+    progress.textContent = `${language === "fr" ? "Vitesse" : "Speed"}: ${slot.session.movementSpeed} · Zoom: ${slot.session.zoom.toFixed(1)}`;
+    info.append(title, meta, progress);
+    const actions = document.createElement("div");
+    actions.className = "save-slot-actions";
+    const resume = document.createElement("button");
+    resume.type = "button";
+    resume.textContent = language === "fr" ? "REPRENDRE" : "RESUME";
+    resume.addEventListener("click", () => resumeSavedSlot(slot.id));
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = language === "fr" ? "SUPPRIMER" : "DELETE";
+    remove.setAttribute("aria-label", `${language === "fr" ? "Supprimer" : "Delete"} ${slot.name}`);
+    remove.addEventListener("click", () => deleteSavedSlot(slot.id));
+    actions.append(resume, remove);
+    item.append(info, actions);
+    list.append(item);
+  });
+  const empty = document.createElement("p");
+  empty.className = "save-slots-empty";
+  empty.textContent = language === "fr" ? "Aucune sauvegarde pour le moment." : "No saved games yet.";
+  empty.hidden = savedGameSlots.length > 0;
+  list.append(empty);
+  panel.hidden = false;
+}
+function clearActiveSaveSlot(): void {
+  activeSaveSlotId = null;
+  savedGameSession = null;
 }
 function showSessionResumePrompt(): void {
-  if (!savedGameSession) return;
-  const panel = document.querySelector<HTMLElement>("#resume-session");
-  const detail = document.querySelector<HTMLElement>("#resume-session-detail");
-  if (!panel || !detail) return;
-  const date = new Date(savedGameSession.savedAt).toLocaleString(language === "fr" ? "fr-FR" : "en-GB");
-  detail.textContent = language === "fr"
-    ? `Dernière session : ${date} · Zone ${savedGameSession.zoneX}, ${savedGameSession.zoneY}`
-    : `Last session: ${date} · Zone ${savedGameSession.zoneX}, ${savedGameSession.zoneY}`;
-  panel.hidden = false;
+  loadSavedGameSlots();
+  renderSavedGameSlots();
 }
 const EXPLORED_ZONE_LIMIT = 200;
 interface ExploredZone { x: number; y: number; visitedAt: number }
@@ -1450,8 +1585,7 @@ function startGameMode(resumeSession: SavedGameSession | null = null): void {
   updateGameHud();
   lastSessionSaveAt = 0;
   saveGameSession();
-  const resumePanel = document.querySelector<HTMLElement>("#resume-session");
-  if (resumePanel) resumePanel.hidden = true;
+  renderSavedGameSlots();
   showToast(resumeSession
     ? (language === "en" ? "Previous session restored." : "Session précédente restaurée.")
     : (language === "en" ? "Game mode enabled. Move with WASD or arrow keys." : "Mode jeu activé. Déplacez-vous avec ZQSD ou les flèches."));
@@ -1722,13 +1856,9 @@ speedControl.addEventListener("input", () => {
 });
 
 $("#game-clear-explored").addEventListener("click", clearExploredZones);
-$("#resume-session-continue").addEventListener("click", () => {
-  if (!savedGameSession) return;
-  const session = savedGameSession;
-  startGameMode(session);
-});
+$("#save-slot-create").addEventListener("click", createNamedSaveSlot);
 $("#resume-session-new").addEventListener("click", () => {
-  clearSavedGameSession();
+  clearActiveSaveSlot();
   const panel = document.querySelector<HTMLElement>("#resume-session");
   if (panel) panel.hidden = true;
   startGameMode();
