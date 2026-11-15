@@ -357,7 +357,7 @@ function addTravelDistance(from:maplibregl.LngLat,to:maplibregl.LngLat):void {
  const a=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
  const meters=6371000*2*Math.atan2(Math.sqrt(a),Math.sqrt(Math.max(0,1-a)));if(!Number.isFinite(meters)||meters<=0||meters>100)return;
  slot.progress.distanceMeters+=meters;const total=slot.progress.remainder+meters;const xp=Math.floor(total/25);slot.progress.remainder=total-xp*25;if(xp>0)slot.progress.xp+=xp;
- checkAchievements(slot.progress);if(xp>0)saveProgress();else renderPlayerProgress();
+ checkAchievements(slot.progress);if(xp>0)saveProgress();
 }
 function renderPlayerProgress():void {
  const p=activeSlot()?.progress??emptyProgress(),level=Math.floor(p.xp/100)+1,within=p.xp%100;
