@@ -11,6 +11,7 @@ import { classifyBuilding, createInteriorLayout, type BuildingKind, type Interio
 import { applyDailyMissionProgress, createDailyMissionState as createProgressDailyMissionState, emptyProgress, ensureDailyMissions as ensureProgressDailyMissions, normalizeProgress, recordDiscoveredCity, recordDiscoveredZone, recordTravelDistance, type DailyMissionState, type MissionHistoryEntry, type PlayerProgress } from "./game/progression.ts";
 import { isValidGameSession, type SavedGameSession } from "./game/saves.ts";
 import { detectStreamingProfile, type NetworkInformationLike, type StreamingProfile } from "./game/streaming.ts";
+import { circlesOverlap, collisionSampleOffsets } from "./game/collisions.ts";
 
 import { translations, type Language } from "./i18n/translations.ts";
 
@@ -1298,11 +1299,7 @@ function isBuildingCollision(lng: number, lat: number): boolean {
   const point = map.project([lng, lat]);
   const playerRadius = Math.max(2, Math.min(12, metersToScreenPixels(lng, lat, 5)));
   if (map.getLayer("juju-collision-buildings") && map.getZoom() >= 14) {
-    const samples: [number, number][] = [
-      [0, 0], [playerRadius, 0], [-playerRadius, 0], [0, playerRadius], [0, -playerRadius],
-      [playerRadius * 0.7, playerRadius * 0.7], [-playerRadius * 0.7, playerRadius * 0.7],
-      [playerRadius * 0.7, -playerRadius * 0.7], [-playerRadius * 0.7, -playerRadius * 0.7],
-    ];
+    const samples = collisionSampleOffsets(playerRadius);
     const buildingHit = samples.some(([dx, dy]) => map.queryRenderedFeatures(
       [point.x + dx, point.y + dy],
       { layers: ["juju-collision-buildings"] },
@@ -1323,7 +1320,7 @@ function isBuildingCollision(lng: number, lat: number): boolean {
         const obstaclePoint = map.project(obstacleCoordinates);
         const obstacleRadiusMeters = Number(feature.properties?.radius) || 10;
         const obstacleRadius = metersToScreenPixels(obstacleCoordinates[0], obstacleCoordinates[1], obstacleRadiusMeters);
-        if (Math.hypot(obstaclePoint.x - point.x, obstaclePoint.y - point.y) < playerRadius + obstacleRadius) return true;
+        if (circlesOverlap(point, obstaclePoint, playerRadius, obstacleRadius)) return true;
       }
     }
   }
