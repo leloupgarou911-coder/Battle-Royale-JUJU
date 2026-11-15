@@ -27,6 +27,9 @@ const translations = {
     exploredZones: "VISITED",
     clearExplored: "CLEAR VISITED ZONES",
     exploredCleared: "Local exploration history cleared.",
+    resumeTitle: "RESUME YOUR SESSION?",
+    resumeContinue: "RESUME",
+    resumeNew: "NEW EXPLORATION",
     moveHelp: "WASD / ARROWS TO MOVE",
     playerReady: "PLAYER READY",
     globe: "3D GLOBE",
@@ -136,6 +139,9 @@ const translations = {
     exploredZones: "VISITÉES",
     clearExplored: "EFFACER LES ZONES VISITÉES",
     exploredCleared: "Historique local des explorations effacé.",
+    resumeTitle: "REPRENDRE VOTRE SESSION ?",
+    resumeContinue: "REPRENDRE",
+    resumeNew: "NOUVELLE EXPLORATION",
     moveHelp: "ZQSD / FLÈCHES POUR BOUGER",
     playerReady: "JOUEUR PRÊT",
     globe: "GLOBE 3D",
@@ -333,10 +339,10 @@ function readSavedGameSession(): SavedGameSession | null {
     return null;
   }
 }
-function saveGameSession(): void {
+function saveGameSession(force = false): void {
   if (!gameMode || !playerMarker) return;
   const now = Date.now();
-  if (now - lastSessionSaveAt < 1800) return;
+  if (!force && now - lastSessionSaveAt < 1800) return;
   const position = playerMarker.getLngLat();
   const zone = zoneFor(position.lng, position.lat);
   const session: SavedGameSession = {
@@ -1452,7 +1458,7 @@ function startGameMode(resumeSession: SavedGameSession | null = null): void {
 }
 
 function stopGameMode(): void {
-  saveGameSession();
+  saveGameSession(true);
   gameMode = false;
   stopMovementLoop();
   setGameWorldVisibility(false);
@@ -1689,10 +1695,10 @@ window.addEventListener("keydown", (event) => {
   setMovementKey(event.key, true);
 });
 window.addEventListener("keyup", (event) => setMovementKey(event.key, false));
-window.addEventListener("blur", () => { stopMovementLoop(); saveGameSession(); });
-window.addEventListener("pagehide", saveGameSession);
+window.addEventListener("blur", () => { stopMovementLoop(); saveGameSession(true); });
+window.addEventListener("pagehide", () => saveGameSession(true));
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { stopMovementLoop(); saveGameSession(); }
+  if (document.hidden) { stopMovementLoop(); saveGameSession(true); }
 });
 document.querySelectorAll<HTMLButtonElement>("[data-move]").forEach((button) => {
   const keyByDirection: Record<string, string> = { up: "arrowup", down: "arrowdown", left: "arrowleft", right: "arrowright" };
