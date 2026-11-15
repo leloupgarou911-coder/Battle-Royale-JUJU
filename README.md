@@ -110,3 +110,12 @@ JUJU World uses the OpenFreeMap Liberty vector style with OpenStreetMap-based ge
 - Sessions older than 90 days or with invalid coordinates/settings are discarded. Saving is local to that browser and device; it is not synchronized between devices or uploaded to a server.
 - The session contains location coordinates. Anyone with access to this browser profile may be able to inspect or clear its site data. The existing **Clear visited zones** button clears the exploration history, not the separate session save.
 - This restores the player's session state only. It does not save downloaded map tiles or make the game playable offline.
+
+## Multiple local save slots
+
+- The game supports up to 10 named local exploration saves. Each slot records the player's coordinates, 750 m zone, movement speed, zoom, and last update time.
+- Create a named save from the current map/player position, resume any saved slot, or delete an individual slot from the save panel.
+- While a slot is active in game mode, its position/settings are refreshed automatically. Starting a new exploration creates a separate automatic slot when the player begins moving.
+- The previous single-session save is migrated to a first save slot when possible.
+- Saves are stored only in this browser's local storage. They are not synced, are not backups, and can be lost if browser site data is cleared. They contain location coordinates.
+- Slots store game-session metadata only, not map tiles or offline map data. Internet is still required to load the map.
