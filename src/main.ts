@@ -6,6 +6,7 @@ import { destinationFromDirection, haversineDistance, normalizeDirection } from 
 import { classifyBuilding, createInteriorLayout, type BuildingKind, type InteriorDoor, type InteriorObject } from "./game/interiors.ts";
 import { applyDailyMissionProgress, createDailyMissionState as createProgressDailyMissionState, emptyProgress, ensureDailyMissions as ensureProgressDailyMissions, normalizeProgress, recordDiscoveredCity, recordDiscoveredZone, recordTravelDistance, type DailyMissionState, type MissionHistoryEntry, type PlayerProgress } from "./game/progression.ts";
 import { isValidGameSession, type SavedGameSession } from "./game/saves.ts";
+import { detectStreamingProfile, type NetworkInformationLike, type StreamingProfile } from "./game/streaming.ts";
 
 type Language = "en" | "fr";
 
@@ -286,35 +287,16 @@ let activeZoneKey = "";
 let interiorPosition = { x: 2, y: 4 };
 let interiorLastDirection = "down";
 let interiorLastMessage = "";
-type StreamingTier = "economy" | "balanced" | "performance";
-interface NetworkInformationLike extends EventTarget {
-  effectiveType?: string;
-  downlink?: number;
-  saveData?: boolean;
+const browserCapabilities = navigator as Navigator & { connection?: NetworkInformationLike; deviceMemory?: number };
+function currentStreamingProfile(): StreamingProfile {
+  return detectStreamingProfile({
+    online: navigator.onLine,
+    memory: browserCapabilities.deviceMemory,
+    cores: navigator.hardwareConcurrency,
+    connection: browserCapabilities.connection,
+  });
 }
-interface StreamingProfile {
-  tier: StreamingTier;
-  tileCacheSize: number;
-  zoneCacheLimit: number;
-  prefetchDepth: number;
-}
-function detectStreamingProfile(): StreamingProfile {
-  const browser = navigator as Navigator & { connection?: NetworkInformationLike; deviceMemory?: number };
-  const connection = browser.connection;
-  const memory = browser.deviceMemory ?? 4;
-  const cores = navigator.hardwareConcurrency ?? 4;
-  const slowConnection = connection?.saveData === true
-    || ["slow-2g", "2g", "3g"].includes(connection?.effectiveType ?? "")
-    || (connection?.downlink !== undefined && connection.downlink < 1.5);
-  if (!navigator.onLine || slowConnection || memory <= 2 || cores <= 2) {
-    return { tier: "economy", tileCacheSize: 48, zoneCacheLimit: 25, prefetchDepth: 1 };
-  }
-  if ((connection?.downlink ?? 0) >= 8 && memory >= 8 && cores >= 8) {
-    return { tier: "performance", tileCacheSize: 256, zoneCacheLimit: 81, prefetchDepth: 3 };
-  }
-  return { tier: "balanced", tileCacheSize: 128, zoneCacheLimit: 49, prefetchDepth: 2 };
-}
-let streamingProfile = detectStreamingProfile();
+let streamingProfile = currentStreamingProfile();
 let protectedZoneKeys = new Set<string>();
 let lastPredictionSignature = "";
 let lastVectorPrefetchSignature = "";
@@ -1276,7 +1258,7 @@ function updateStreamingHud(): void {
 }
 
 function applyStreamingProfile(): void {
-  streamingProfile = detectStreamingProfile();
+  streamingProfile = currentStreamingProfile();
   trimZoneObstacleCache();
   lastPredictionSignature = "";
   lastVectorPrefetchSignature = "";
