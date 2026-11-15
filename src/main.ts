@@ -43,6 +43,9 @@ const translations = {
     progressAchievements: "ACHIEVEMENTS", progressRewards: "UNLOCKED REWARDS",
     moveHelp: "WASD / ARROWS TO MOVE",
     playerReady: "PLAYER READY",
+    playerAriaLabel: "Player",
+    blocked: "BLOCKED",
+    zoneSpawnLabel: "ZONE SPAWN",
     globe: "3D GLOBE",
     buildings: "3D BUILDINGS",
     terrain: "3D TERRAIN",
@@ -164,6 +167,9 @@ const translations = {
     progressAchievements: "SUCCÈS", progressRewards: "RÉCOMPENSES DÉBLOQUÉES",
     moveHelp: "ZQSD / FLÈCHES POUR BOUGER",
     playerReady: "JOUEUR PRÊT",
+    playerAriaLabel: "Joueur",
+    blocked: "BLOQUÉ",
+    zoneSpawnLabel: "POINT D’APPARITION",
     globe: "GLOBE 3D",
     buildings: "BÂTIMENTS 3D",
     terrain: "RELIEF 3D",
@@ -1552,7 +1558,7 @@ function updateGameZone(lng: number, lat: number): void {
   const spawnPoint = spawnForZone(zone.x, zone.y);
   spawnSource?.setData({
     type: "Feature",
-    properties: { label: "ZONE SPAWN" },
+    properties: { label: translations[language].zoneSpawnLabel },
     geometry: { type: "Point", coordinates: spawnPoint },
   });
   $("#game-zone-status").textContent = `${translations[language].zoneLoading} · ${zone.x}:${zone.y}`;
@@ -1889,7 +1895,7 @@ function startGameMode(resumeSession: SavedGameSession | null = null): void {
   player.className = "juju-player";
   player.dataset.direction = "down";
   player.setAttribute("role", "img");
-  player.setAttribute("aria-label", "Player");
+  player.setAttribute("aria-label", translations[language].playerAriaLabel);
   playerMarker?.remove();
   playerMarker = new maplibregl.Marker({ element: player, anchor: "center" }).setLngLat(spawn).addTo(map);
   map.easeTo({ center: spawn, zoom: resumeSession?.zoom ?? Math.max(16, map.getZoom()), pitch: 0, bearing: 0, duration: 850 });
@@ -1986,7 +1992,7 @@ function movementTick(time: number): void {
     const destination = destinationFromDirection(center, direction, movementSpeed * delta);
     const next = new maplibregl.LngLat(destination.lng, destination.lat);
     if (isBuildingCollision(next.lng, next.lat)) {
-      $("#game-player-status").textContent = language === "en" ? "BLOCKED" : "BLOQUÉ";
+      $("#game-player-status").textContent = translations[language].blocked;
       heldDirections.clear();
       playerMarker.getElement().classList.remove("is-moving");
       previousMovementTime = 0;
