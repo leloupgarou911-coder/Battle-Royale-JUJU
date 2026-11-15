@@ -2258,7 +2258,7 @@ game3dButton?.addEventListener("click", () => {
     const roadCount = mappedRoads.length;
     const terrainReady = terrainSamples.length > 0;
     showToast(language === "fr"
-      ? `${count} bâtiments · ${roadCount} segments routiers cartographiques · relief ${terrainReady ? "DEM actif" : "plat (activez le relief sur la carte avant le mode 3D") }.`
+      ? `${count} bâtiments · ${roadCount} routes cartographiques · relief ${terrainReady ? "DEM actif" : "plat (activez le relief sur la carte avant le mode 3D)"}.`
       : `${count} buildings · ${roadCount} mapped road features · terrain ${terrainReady ? "DEM active" : "flat (enable map terrain before entering 3D)"}.`);
   } catch (error) {
     console.error("Could not start the Three.js world:", error);
