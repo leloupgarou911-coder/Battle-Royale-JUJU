@@ -19,6 +19,11 @@ const translations = {
     loadZone: "RELOAD CURRENT ZONE",
     zoneReady: "ZONE READY",
     zoneLoading: "LOADING NEARBY MAP…",
+    streamingLabel: "STREAMING",
+    streamingEconomy: "ECONOMY",
+    streamingBalanced: "BALANCED",
+    streamingPerformance: "PERFORMANCE",
+    streamingOffline: "OFFLINE",
     moveHelp: "WASD / ARROWS TO MOVE",
     playerReady: "PLAYER READY",
     globe: "3D GLOBE",
@@ -120,6 +125,11 @@ const translations = {
     loadZone: "RECHARGER LA ZONE",
     zoneReady: "ZONE CHARGÉE",
     zoneLoading: "CHARGEMENT DE LA CARTE PROCHE…",
+    streamingLabel: "CHARGEMENT",
+    streamingEconomy: "ÉCONOMIE",
+    streamingBalanced: "ÉQUILIBRÉ",
+    streamingPerformance: "PERFORMANCES",
+    streamingOffline: "HORS LIGNE",
     moveHelp: "ZQSD / FLÈCHES POUR BOUGER",
     playerReady: "JOUEUR PRÊT",
     globe: "GLOBE 3D",
@@ -237,7 +247,41 @@ let interiorLastDirection = "down";
 let interiorLastMessage = "";
 const GAME_ZONE_METERS = 750;
 const WORLD_METERS = 40075016.68557849;
-const ZONE_CACHE_LIMIT = 81;
+type StreamingTier = "economy" | "balanced" | "performance";
+interface NetworkInformationLike extends EventTarget {
+  effectiveType?: string;
+  downlink?: number;
+  saveData?: boolean;
+}
+interface StreamingProfile {
+  tier: StreamingTier;
+  tileCacheSize: number;
+  zoneCacheLimit: number;
+  prefetchDepth: number;
+}
+function detectStreamingProfile(): StreamingProfile {
+  const browser = navigator as Navigator & { connection?: NetworkInformationLike; deviceMemory?: number };
+  const connection = browser.connection;
+  const memory = browser.deviceMemory ?? 4;
+  const cores = navigator.hardwareConcurrency ?? 4;
+  const slowConnection = connection?.saveData === true
+    || ["slow-2g", "2g", "3g"].includes(connection?.effectiveType ?? "")
+    || (connection?.downlink !== undefined && connection.downlink < 1.5);
+  if (!navigator.onLine || slowConnection || memory <= 2 || cores <= 2) {
+    return { tier: "economy", tileCacheSize: 48, zoneCacheLimit: 25, prefetchDepth: 1 };
+  }
+  if ((connection?.downlink ?? 0) >= 8 && memory >= 8 && cores >= 8) {
+    return { tier: "performance", tileCacheSize: 256, zoneCacheLimit: 81, prefetchDepth: 3 };
+  }
+  return { tier: "balanced", tileCacheSize: 128, zoneCacheLimit: 49, prefetchDepth: 2 };
+}
+let streamingProfile = detectStreamingProfile();
+let protectedZoneKeys = new Set<string>();
+let lastPredictionSignature = "";
+let lastVectorPrefetchSignature = "";
+let vectorTileTemplatesPromise: Promise<string[]> | null = null;
+const prefetchedVectorTiles = new Set<string>();
+const pendingVectorTiles = new Set<string>();
 const zoneObstacleCache = new Map<string, GeoJSON.FeatureCollection<GeoJSON.Point>>();
 
 const map: MapLibreMap = new maplibregl.Map({
@@ -252,8 +296,9 @@ const map: MapLibreMap = new maplibregl.Map({
   maxPitch: 75,
   attributionControl: false,
   renderWorldCopies: true,
-  // Keep nearby vector tiles available as the player crosses world zones.
-  maxTileCacheSize: 256,
+  // Select the initial vector-tile cache budget from device and network hints.
+  maxTileCacheSize: streamingProfile.tileCacheSize,
+  maxTileCacheZoomLevels: streamingProfile.tier === "economy" ? 3 : streamingProfile.tier === "balanced" ? 4 : 5,
   dragRotate: false,
   pitchWithRotate: false,
   touchPitch: false,
@@ -559,12 +604,17 @@ function createZoneObstacles(zoneX: number, zoneY: number): GeoJSON.FeatureColle
   }
   const collection: GeoJSON.FeatureCollection<GeoJSON.Point> = { type: "FeatureCollection", features };
   zoneObstacleCache.set(cacheKey, collection);
-  while (zoneObstacleCache.size > ZONE_CACHE_LIMIT) {
-    const oldestKey = zoneObstacleCache.keys().next().value;
+  trimZoneObstacleCache();
+  return collection;
+}
+
+function trimZoneObstacleCache(): void {
+  while (zoneObstacleCache.size > streamingProfile.zoneCacheLimit) {
+    const oldestUnprotected = [...zoneObstacleCache.keys()].find((key) => !protectedZoneKeys.has(key));
+    const oldestKey = oldestUnprotected ?? zoneObstacleCache.keys().next().value;
     if (oldestKey === undefined) break;
     zoneObstacleCache.delete(oldestKey);
   }
-  return collection;
 }
 
 function warmPredictiveZones(lng: number, lat: number, directionX: number, directionY: number): void {
@@ -573,8 +623,11 @@ function warmPredictiveZones(lng: number, lat: number, directionX: number, direc
   const origin = zoneFor(lng, lat);
   const stepX = Math.sign(directionX);
   const stepY = Math.sign(directionY);
-  // Prepare a small corridor in front of the player, including side zones for turns.
-  for (let distance = 1; distance <= 3; distance += 1) {
+  const depth = streamingProfile.prefetchDepth;
+  const signature = `${origin.key}:${stepX}:${stepY}:${depth}`;
+  if (signature === lastPredictionSignature) return;
+  lastPredictionSignature = signature;
+  for (let distance = 1; distance <= depth; distance += 1) {
     const centerX = origin.x + stepX * distance;
     const centerY = origin.y + stepY * distance;
     for (let side = -1; side <= 1; side += 1) {
@@ -583,6 +636,112 @@ function warmPredictiveZones(lng: number, lat: number, directionX: number, direc
       createZoneObstacles(zoneX, zoneY);
     }
   }
+  trimZoneObstacleCache();
+}
+
+async function getVectorTileTemplates(): Promise<string[]> {
+  if (vectorTileTemplatesPromise) return vectorTileTemplatesPromise;
+  vectorTileTemplatesPromise = (async () => {
+    try {
+      const source = map.getStyle().sources.openmaptiles as { tiles?: string[]; url?: string } | undefined;
+      if (!source) return [];
+      if (source.tiles?.length) return source.tiles;
+      if (!source.url) return [];
+      const response = await fetch(source.url, { cache: "force-cache", mode: "cors" });
+      if (!response.ok) return [];
+      const tileJson = await response.json() as { tiles?: string[] };
+      return tileJson.tiles ?? [];
+    } catch {
+      return [];
+    }
+  })();
+  return vectorTileTemplatesPromise;
+}
+
+function tileCoordinate(lng: number, lat: number, zoom: number): { x: number; y: number } {
+  const scale = 2 ** zoom;
+  const clampedLat = Math.max(-85.051129, Math.min(85.051129, lat));
+  const radians = clampedLat * Math.PI / 180;
+  return {
+    x: Math.floor(((lng + 180) / 360) * scale),
+    y: Math.max(0, Math.min(scale - 1, Math.floor((1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2 * scale))),
+  };
+}
+
+async function prefetchVectorTilesAhead(lng: number, lat: number, directionX: number, directionY: number): Promise<void> {
+  if (!gameMode || !navigator.onLine) return;
+  const magnitude = Math.hypot(directionX, directionY);
+  if (magnitude < 0.01) return;
+  const zoom = Math.max(12, Math.min(17, Math.floor(map.getZoom())));
+  const current = tileCoordinate(lng, lat, zoom);
+  const stepX = Math.sign(directionX);
+  const stepY = Math.sign(directionY);
+  const signature = `${zoom}:${current.x}:${current.y}:${stepX}:${stepY}:${streamingProfile.tier}`;
+  if (signature === lastVectorPrefetchSignature) return;
+  lastVectorPrefetchSignature = signature;
+  const templates = await getVectorTileTemplates();
+  if (!templates.length || !gameMode || !navigator.onLine) return;
+  const template = templates[0];
+  const count = streamingProfile.tier === "economy" ? 1 : streamingProfile.tier === "balanced" ? 2 : 3;
+  for (let distance = 1; distance <= Math.min(streamingProfile.prefetchDepth, count); distance += 1) {
+    const n = 2 ** zoom;
+    const x = ((current.x + stepX * distance) % n + n) % n;
+    const y = Math.max(0, Math.min(n - 1, current.y + stepY * distance));
+    const key = `${zoom}/${x}/${y}`;
+    if (prefetchedVectorTiles.has(key) || pendingVectorTiles.has(key)) continue;
+    const url = template.replaceAll("{z}", String(zoom)).replaceAll("{x}", String(x))
+      .replaceAll("{y}", String(y)).replaceAll("{ratio}", "");
+    if (url.includes("{")) continue;
+    pendingVectorTiles.add(key);
+    void fetch(url, { mode: "cors", credentials: "omit", cache: "default" })
+      .then(async (response) => {
+        if (response.ok) {
+          await response.arrayBuffer();
+          prefetchedVectorTiles.add(key);
+          while (prefetchedVectorTiles.size > streamingProfile.zoneCacheLimit) {
+            const oldest = prefetchedVectorTiles.values().next().value;
+            if (oldest === undefined) break;
+            prefetchedVectorTiles.delete(oldest);
+          }
+        }
+      })
+      .catch(() => { /* Visible tiles are still requested by MapLibre. */ })
+      .finally(() => pendingVectorTiles.delete(key));
+  }
+}
+
+function updateStreamingHud(): void {
+  const label = streamingProfile.tier === "economy"
+    ? translations[language].streamingEconomy
+    : streamingProfile.tier === "performance"
+      ? translations[language].streamingPerformance
+      : translations[language].streamingBalanced;
+  $("#game-streaming-status").textContent = navigator.onLine ? label : translations[language].streamingOffline;
+  $("#game-streaming-detail").textContent = language === "en"
+    ? `Cache ${streamingProfile.zoneCacheLimit} · Ahead ${streamingProfile.prefetchDepth}`
+    : `Cache ${streamingProfile.zoneCacheLimit} · Avance ${streamingProfile.prefetchDepth}`;
+}
+
+function applyStreamingProfile(): void {
+  streamingProfile = detectStreamingProfile();
+  trimZoneObstacleCache();
+  lastPredictionSignature = "";
+  lastVectorPrefetchSignature = "";
+  const economy = streamingProfile.tier === "economy";
+  const ranges: Array<[string, number]> = [
+    ["juju-game-roads-casing", economy ? 13 : 12],
+    ["juju-game-roads", economy ? 13 : 12],
+    ["juju-game-greenery", economy ? 12 : 10],
+    ["juju-game-buildings", economy ? 15 : 14],
+    ["juju-poi-points", economy ? 14 : 13],
+    ["juju-poi-labels", economy ? 17 : streamingProfile.tier === "balanced" ? 15 : 14],
+    ["juju-park-areas", economy ? 13 : 11],
+    ["juju-3d-buildings", economy ? 14 : 13],
+  ];
+  for (const [layerId, minZoom] of ranges) {
+    if (map.getLayer(layerId)) map.setLayerZoomRange(layerId, minZoom, 24);
+  }
+  updateStreamingHud();
 }
 
 function ensureGameLayers(): void {
@@ -763,19 +922,25 @@ function updateGameZone(lng: number, lat: number): void {
   const zone = zoneFor(lng, lat);
   if (zone.key === activeZoneKey) return;
   activeZoneKey = zone.key;
+  protectedZoneKeys = new Set<string>();
+  for (let x = -1; x <= 1; x += 1) {
+    for (let y = -1; y <= 1; y += 1) protectedZoneKeys.add(`${zone.x + x}:${zone.y + y}`);
+  }
   const source = map.getSource("juju-active-zone") as maplibregl.GeoJSONSource | undefined;
   source?.setData(zonePolygon(zone.x, zone.y));
   const obstacles = map.getSource("juju-zone-obstacles") as maplibregl.GeoJSONSource | undefined;
-  // Stream decorative props for the active zone and its eight neighbours.
+  // Keep the active 3x3 visible; prepare a wider ring only on capable devices.
   const nearbyFeatures: GeoJSON.Feature<GeoJSON.Point>[] = [];
-  // Render the active zone plus its eight neighbours; warm a second ring for the next move.
-  for (let offsetX = -2; offsetX <= 2; offsetX += 1) {
-    for (let offsetY = -2; offsetY <= 2; offsetY += 1) {
+  const warmRadius = streamingProfile.tier === "economy" ? 1 : 2;
+  for (let offsetX = -warmRadius; offsetX <= warmRadius; offsetX += 1) {
+    for (let offsetY = -warmRadius; offsetY <= warmRadius; offsetY += 1) {
       const zoneFeatures = createZoneObstacles(zone.x + offsetX, zone.y + offsetY).features;
       if (Math.abs(offsetX) <= 1 && Math.abs(offsetY) <= 1) nearbyFeatures.push(...zoneFeatures);
     }
   }
+  trimZoneObstacleCache();
   obstacles?.setData({ type: "FeatureCollection", features: nearbyFeatures });
+  updateStreamingHud();
   const spawnSource = map.getSource("juju-zone-spawn") as maplibregl.GeoJSONSource | undefined;
   const spawnPoint = spawnForZone(zone.x, zone.y);
   spawnSource?.setData({
@@ -786,10 +951,12 @@ function updateGameZone(lng: number, lat: number): void {
   $("#game-zone-status").textContent = `${translations[language].zoneLoading} · ${zone.x}:${zone.y}`;
   map.once("idle", () => {
     if (gameMode && activeZoneKey === zone.key) {
-      const sourceReady = map.isSourceLoaded("openmaptiles") && map.areTilesLoaded();
-      $("#game-zone-status").textContent = sourceReady
-        ? `ZONE ${zone.x} · ${zone.y} · ${translations[language].zoneReady}`
-        : `${translations[language].zoneLoading} · ${zone.x}:${zone.y}`;
+      const sourceReady = navigator.onLine && map.isSourceLoaded("openmaptiles") && map.areTilesLoaded();
+      $("#game-zone-status").textContent = !navigator.onLine
+        ? `${translations[language].streamingOffline} · ${zone.x}:${zone.y}`
+        : sourceReady
+          ? `ZONE ${zone.x} · ${zone.y} · ${translations[language].zoneReady}`
+          : `${translations[language].zoneLoading} · ${zone.x}:${zone.y}`;
     }
   });
 }
@@ -1154,6 +1321,7 @@ function movementTick(time: number): void {
     const activeDirection = [...heldDirections].map((key) => directionKeys[key]).filter(Boolean).at(-1);
     // Warm deterministic scenery ahead of the current movement vector before entering it.
     warmPredictiveZones(next.lng, next.lat, dx, dy);
+    void prefetchVectorTilesAhead(next.lng, next.lat, dx, dy);
     const playerElement = playerMarker.getElement();
     if (activeDirection) playerElement.dataset.direction = activeDirection.direction;
     playerElement.classList.add("is-moving");
@@ -1218,6 +1386,11 @@ function setMapView(view: "flat" | "globe"): void {
 
 map.on("moveend", () => { if (gameMode) updateGameHud(); });
 
+const networkInfo = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
+window.addEventListener("online", applyStreamingProfile);
+window.addEventListener("offline", applyStreamingProfile);
+networkInfo?.addEventListener("change", applyStreamingProfile);
+
 // MapLibre streams vector tiles for the visible viewport as the camera moves.
 map.on("sourcedata", (event) => {
   if (!gameMode || event.sourceId !== "openmaptiles" || !event.isSourceLoaded) return;
@@ -1238,12 +1411,14 @@ map.on("load", () => {
   $("#globe-view").classList.remove("active");
   add3DBuildings();
   addPointsOfInterest();
+  applyStreamingProfile();
 });
 
 map.on("style.load", () => {
   ensureGameLayers();
   add3DBuildings();
   addPointsOfInterest();
+  applyStreamingProfile();
 });
 
 map.on("error", (event) => {
