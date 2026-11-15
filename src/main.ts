@@ -324,7 +324,6 @@ interface SavedGameSlot {
 }
 let savedGameSlots: SavedGameSlot[] = [];
 let activeSaveSlotId: string | null = null;
-let savedGameSession: SavedGameSession | null = null;
 let lastSessionSaveAt = 0;
 function validGameSession(value: unknown): value is SavedGameSession {
   if (!value || typeof value !== "object") return false;
@@ -422,7 +421,6 @@ function saveGameSession(force = false): void {
     savedGameSlots = [slot, ...savedGameSlots.filter((item) => item.id !== slot!.id)];
   }
   savedGameSlots = savedGameSlots.slice(0, SAVE_SLOT_LIMIT);
-  savedGameSession = session;
   persistSavedGameSlots();
   lastSessionSaveAt = now;
   renderSavedGameSlots();
@@ -447,7 +445,6 @@ function createNamedSaveSlot(): void {
   savedGameSlots.unshift(slot);
   savedGameSlots = savedGameSlots.slice(0, SAVE_SLOT_LIMIT);
   activeSaveSlotId = slot.id;
-  savedGameSession = session;
   persistSavedGameSlots();
   if (input) input.value = "";
   renderSavedGameSlots();
@@ -457,14 +454,12 @@ function resumeSavedSlot(slotId: string): void {
   const slot = savedGameSlots.find((item) => item.id === slotId);
   if (!slot) return;
   activeSaveSlotId = slot.id;
-  savedGameSession = slot.session;
   startGameMode(slot.session);
 }
 function deleteSavedSlot(slotId: string): void {
   savedGameSlots = savedGameSlots.filter((item) => item.id !== slotId);
   if (activeSaveSlotId === slotId) {
     activeSaveSlotId = null;
-    savedGameSession = null;
   }
   persistSavedGameSlots();
   renderSavedGameSlots();
@@ -509,7 +504,6 @@ function renderSavedGameSlots(): void {
 }
 function clearActiveSaveSlot(): void {
   activeSaveSlotId = null;
-  savedGameSession = null;
 }
 function showSessionResumePrompt(): void {
   loadSavedGameSlots();
@@ -1751,7 +1745,6 @@ map.on("load", () => {
   add3DBuildings();
   addPointsOfInterest();
   applyStreamingProfile();
-  savedGameSession = readSavedGameSession();
   showSessionResumePrompt();
 });
 
