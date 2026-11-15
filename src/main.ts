@@ -826,6 +826,43 @@ function setLanguage(next: Language): void {
   renderDailyMissions();
   $("#language-toggle").textContent = next === "en" ? "FR" : "EN";
   $("#language-toggle").setAttribute("aria-label", next === "en" ? "Passer en français" : "Switch to English");
+  const homeText = next === "fr" ? {
+    kicker: "LE MONDE VOUS ATTEND", title: "VOTRE MONDE.<br><em>VOTRE AVENTURE.</em>",
+    description: "Explorez des lieux réels, découvrez de nouvelles villes et créez votre propre parcours sur une carte du monde vivante.",
+    play: '<span>▶</span> JOUER <small>COMMENCER À EXPLORER</small>',
+    saves: '<span>▤</span> MES SAUVEGARDES', settings: "⚙ PARAMÈTRES",
+    profile: "◉ PROFIL & PROGRESSION", world: "EXPLORATION DU MONDE",
+    worldCaption: "UNE PLANÈTE<br><strong>UNE INFINITÉ DE LIEUX</strong>",
+    global: "CARTE MONDIALE", footer: "UNE EXPÉRIENCE EN MONDE OUVERT",
+    bottom: "CONÇU POUR L'EXPLORATION"
+  } : {
+    kicker: "THE WORLD IS WAITING", title: "YOUR WORLD.<br><em>YOUR ADVENTURE.</em>",
+    description: "Explore real places, discover new cities and create your own journey across a living world map.",
+    play: '<span>▶</span> PLAY <small>START EXPLORING</small>',
+    saves: '<span>▤</span> MY SAVES', settings: "⚙ SETTINGS",
+    profile: "◉ PROFILE & PROGRESSION", world: "WORLD EXPLORER",
+    worldCaption: "ONE PLANET<br><strong>ENDLESS PLACES</strong>",
+    global: "GLOBAL MAP", footer: "OPEN WORLD EXPERIENCE",
+    bottom: "BUILT FOR EXPLORATION"
+  };
+  const setHomeText = (selector: string, value: string, html = false) => {
+    const element = document.querySelector<HTMLElement>(selector);
+    if (element) html ? element.innerHTML = value : element.textContent = value;
+  };
+  setHomeText(".home-copy .home-kicker", homeText.kicker);
+  setHomeText(".home-copy h1", homeText.title, true);
+  setHomeText(".home-description", homeText.description);
+  setHomeText("#home-play", homeText.play, true);
+  setHomeText("#home-saves", homeText.saves, true);
+  setHomeText("#home-settings", homeText.settings);
+  setHomeText("#home-profile", homeText.profile);
+  setHomeText(".home-world-label", homeText.world);
+  setHomeText(".home-world-caption", homeText.worldCaption, true);
+  setHomeText(".home-world-footer span:first-child", homeText.global);
+  setHomeText(".home-world-footer span:last-child", homeText.footer);
+  setHomeText(".home-bottom span:last-child", homeText.bottom);
+  setHomeText("#save-slots-back", next === "fr" ? "← MENU PRINCIPAL" : "← MAIN MENU");
+  setHomeText("#home-dialog-close", "×");
 }
 
 
