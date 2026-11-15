@@ -117,6 +117,19 @@
         <button id="resume-session-new" class="save-new-exploration" type="button" data-i18n="resumeNew">NEW EXPLORATION</button>
       </section>
       <section class="game-hud" aria-label="Game controls">
+        <div class="player-progress-panel" aria-label="Player progression">
+          <div class="progress-heading"><strong data-i18n="progressTitle">PLAYER PROGRESSION</strong><span><span data-i18n="progressLevel">LEVEL</span> <b id="progress-level">1</b></span></div>
+          <div class="progress-xp-label"><span id="progress-xp">0 / 100 XP · 0 total</span><span data-i18n="progressNext">NEXT LEVEL</span></div>
+          <div class="progress-xp-track"><span id="progress-xp-bar"></span></div>
+          <div class="progress-stats">
+            <div><small data-i18n="progressDistance">DISTANCE</small><strong id="progress-distance">0 m</strong></div>
+            <div><small data-i18n="progressZones">ZONES</small><strong id="progress-zones">0</strong></div>
+            <div><small data-i18n="progressCities">CITIES</small><strong id="progress-cities">0</strong></div>
+            <div><small data-i18n="progressAchievements">ACHIEVEMENTS</small><strong id="progress-achievements">0 / 7</strong></div>
+          </div>
+          <div class="progress-rewards-heading" data-i18n="progressRewards">UNLOCKED REWARDS</div>
+          <div id="progress-rewards" class="progress-rewards"><span>No achievements yet</span></div>
+        </div>
         <div class="game-hud-top"><span class="game-hud-brand">JUJU <b>GAME MODE</b></span><span id="game-player-status">PLAYER READY</span></div>
         <div class="game-hud-stats"><div><small>ACTIVE ZONE</small><strong id="game-zone-status">ZONE READY</strong><span id="game-zone-coordinates">0.000, 0.000</span></div><div><small>PLAYER</small><strong>TOP-DOWN</strong><span data-i18n="moveHelp">WASD / ARROWS TO MOVE</span></div><div><small data-i18n="streamingLabel">STREAMING</small><strong id="game-streaming-status">BALANCED</strong><span id="game-streaming-detail">Cache 49 · Ahead 2</span></div><div><small data-i18n="exploredZones">VISITED</small><strong id="game-explored-count">0</strong><span>LOCAL</span></div></div>
         <div class="game-speed-control">
