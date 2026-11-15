@@ -17,6 +17,7 @@ import {
 import { classifyBuilding, createInteriorLayout } from "../src/game/interiors.ts";
 import { applyDailyMissionProgress, createDailyMissionState, emptyProgress, normalizeProgress, recordDiscoveredCity, recordDiscoveredZone, recordTravelDistance } from "../src/game/progression.ts";
 import { detectStreamingProfile } from "../src/game/streaming.ts";
+import { circlesOverlap, collisionSampleOffsets } from "../src/game/collisions.ts";
 import { readFileSync } from "node:fs";
 import { translations } from "../src/i18n/translations.ts";
 
@@ -229,4 +230,22 @@ test("every HTML translation and accessibility key exists", () => {
   for (const [, key] of html.matchAll(/data-i18n-aria="([^"]+)"/g)) {
     assert.ok(key in translations.en, `Missing accessibility translation: ${key}`);
   }
+});
+
+test("collision sample points cover the player radius in all directions", () => {
+  const samples = collisionSampleOffsets(10);
+  assert.equal(samples.length, 9);
+  assert.deepEqual(samples[0], [0, 0]);
+  assert.ok(samples.some(([x, y]) => x === 10 && y === 0));
+  assert.ok(samples.some(([x, y]) => x === -10 && y === 0));
+  assert.ok(samples.some(([x, y]) => x === 0 && y === 10));
+  assert.ok(samples.some(([x, y]) => x === 0 && y === -10));
+});
+
+test("collision circles detect overlap but not tangency or distant objects", () => {
+  assert.equal(circlesOverlap({ x: 0, y: 0 }, { x: 8, y: 0 }, 5, 5), true);
+  assert.equal(circlesOverlap({ x: 0, y: 0 }, { x: 10, y: 0 }, 5, 5), false);
+  assert.equal(circlesOverlap({ x: 0, y: 0 }, { x: 20, y: 0 }, 5, 5), false);
+  assert.equal(circlesOverlap({ x: 0, y: 0 }, { x: 1, y: 1 }, -1, 5), false);
+  assert.equal(circlesOverlap({ x: Number.NaN, y: 0 }, { x: 1, y: 1 }, 5, 5), false);
 });
