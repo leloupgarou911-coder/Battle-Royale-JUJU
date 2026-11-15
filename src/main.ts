@@ -1971,6 +1971,9 @@ function stopGameMode(): void {
   playerMarker = null;
   $("#app").classList.remove("game-mode");
   $("#game-mode-toggle").textContent = translations[language].enterGame;
+  $("#game-camera").classList.remove("active");
+  $("#flat-view").classList.add("active");
+  $("#globe-view").classList.remove("active");
   virtualEntranceMarker?.remove();
   virtualEntranceMarker = null;
   map.dragPan.enable();
