@@ -14,7 +14,7 @@ import {
   haversineDistance,
   normalizeDirection,
 } from "../src/game/movement.ts";
-import { classifyBuilding, createInteriorLayout } from "../src/game/interiors.ts";
+import { adjacentInteriorFloor, classifyBuilding, createInteriorLayout } from "../src/game/interiors.ts";
 import { applyDailyMissionProgress, createDailyMissionState, emptyProgress, normalizeProgress, recordDiscoveredCity, recordDiscoveredZone, recordTravelDistance } from "../src/game/progression.ts";
 import { detectStreamingProfile } from "../src/game/streaming.ts";
 import { circlesOverlap, collisionSampleOffsets } from "../src/game/collisions.ts";
@@ -248,4 +248,14 @@ test("collision circles detect overlap but not tangency or distant objects", () 
   assert.equal(circlesOverlap({ x: 0, y: 0 }, { x: 20, y: 0 }, 5, 5), false);
   assert.equal(circlesOverlap({ x: 0, y: 0 }, { x: 1, y: 1 }, -1, 5), false);
   assert.equal(circlesOverlap({ x: Number.NaN, y: 0 }, { x: 1, y: 1 }, 5, 5), false);
+});
+
+test("staircase navigation never leaves the mapped floor range", () => {
+  assert.equal(adjacentInteriorFloor(0, 3, 1), 1);
+  assert.equal(adjacentInteriorFloor(1, 3, 1), 2);
+  assert.equal(adjacentInteriorFloor(2, 3, 1), null);
+  assert.equal(adjacentInteriorFloor(0, 3, -1), null);
+  assert.equal(adjacentInteriorFloor(2, 3, -1), 1);
+  assert.equal(adjacentInteriorFloor(0.5, 3, 1), null);
+  assert.equal(adjacentInteriorFloor(0, 0, 1), null);
 });
