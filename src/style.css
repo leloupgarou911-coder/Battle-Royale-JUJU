@@ -278,3 +278,8 @@ h1 span { color: var(--gold); }
 
 .interior-map-metadata { display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px 14px; margin:8px 0; color:#8fa39a; font-size:9px; letter-spacing:.04em; }
 .interior-note { max-width:680px; }
+
+
+/* Local exploration history */
+.game-clear-explored { width: 100%; min-height: 29px; margin-top: 8px; border: 1px solid rgba(255,255,255,.12); border-radius: 5px; background: rgba(255,255,255,.035); color: #aeb9bf; font: 700 8px "DM Sans",sans-serif; letter-spacing: .08em; cursor: pointer; }
+.game-clear-explored:hover { border-color: rgba(120,214,176,.55); color: #d5f3e5; background: rgba(120,214,176,.08); }
