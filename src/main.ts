@@ -290,6 +290,91 @@ const prefetchedVectorTiles = new Set<string>();
 const pendingVectorTiles = new Set<string>();
 const zoneObstacleCache = new Map<string, GeoJSON.FeatureCollection<GeoJSON.Point>>();
 const EXPLORED_STORAGE_KEY = "juju-world-explored-zones-v1";
+const SESSION_STORAGE_KEY = "juju-world-session-v1";
+const SESSION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+interface SavedGameSession {
+  lng: number;
+  lat: number;
+  zoneX: number;
+  zoneY: number;
+  movementSpeed: number;
+  zoom: number;
+  savedAt: number;
+}
+let savedGameSession: SavedGameSession | null = null;
+let lastSessionSaveAt = 0;
+function readSavedGameSession(): SavedGameSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<SavedGameSession>;
+    if (!Number.isFinite(value.lng) || !Number.isFinite(value.lat)
+      || !Number.isInteger(value.zoneX) || !Number.isInteger(value.zoneY)
+      || !Number.isFinite(value.movementSpeed) || !Number.isFinite(value.zoom)
+      || !Number.isFinite(value.savedAt)) return null;
+    if ((value.lng as number) < -180 || (value.lng as number) > 180
+      || (value.lat as number) < -85.051129 || (value.lat as number) > 85.051129
+      || (value.savedAt as number) > Date.now()
+      || Date.now() - (value.savedAt as number) > SESSION_MAX_AGE_MS) {
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+      return null;
+    }
+    return {
+      lng: value.lng as number,
+      lat: value.lat as number,
+      zoneX: value.zoneX as number,
+      zoneY: value.zoneY as number,
+      movementSpeed: Math.max(80, Math.min(360, value.movementSpeed as number)),
+      zoom: Math.max(15, Math.min(19, value.zoom as number)),
+      savedAt: value.savedAt as number,
+    };
+  } catch (error) {
+    console.warn("Could not read saved game session:", error);
+    return null;
+  }
+}
+function saveGameSession(): void {
+  if (!gameMode || !playerMarker) return;
+  const now = Date.now();
+  if (now - lastSessionSaveAt < 1800) return;
+  const position = playerMarker.getLngLat();
+  const zone = zoneFor(position.lng, position.lat);
+  const session: SavedGameSession = {
+    lng: position.lng,
+    lat: position.lat,
+    zoneX: zone.x,
+    zoneY: zone.y,
+    movementSpeed,
+    zoom: map.getZoom(),
+    savedAt: now,
+  };
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+    savedGameSession = session;
+    lastSessionSaveAt = now;
+  } catch (error) {
+    console.warn("Could not save game session:", error);
+  }
+}
+function clearSavedGameSession(): void {
+  savedGameSession = null;
+  try {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch (error) {
+    console.warn("Could not clear saved game session:", error);
+  }
+}
+function showSessionResumePrompt(): void {
+  if (!savedGameSession) return;
+  const panel = document.querySelector<HTMLElement>("#resume-session");
+  const detail = document.querySelector<HTMLElement>("#resume-session-detail");
+  if (!panel || !detail) return;
+  const date = new Date(savedGameSession.savedAt).toLocaleString(language === "fr" ? "fr-FR" : "en-GB");
+  detail.textContent = language === "fr"
+    ? `Dernière session : ${date} · Zone ${savedGameSession.zoneX}, ${savedGameSession.zoneY}`
+    : `Last session: ${date} · Zone ${savedGameSession.zoneX}, ${savedGameSession.zoneY}`;
+  panel.hidden = false;
+}
 const EXPLORED_ZONE_LIMIT = 200;
 interface ExploredZone { x: number; y: number; visitedAt: number }
 const exploredZones = new Map<string, ExploredZone>();
@@ -1313,7 +1398,7 @@ function closeBuildingInterior(): void {
   $("#building-interior").hidden = true;
 }
 
-function startGameMode(): void {
+function startGameMode(resumeSession: SavedGameSession | null = null): void {
   gameMode = true;
   heldDirections.clear();
   disableTerrain();
@@ -1324,8 +1409,17 @@ function startGameMode(): void {
   map.touchZoomRotate.disableRotation();
   const current = map.getCenter();
   const currentZone = zoneFor(current.lng, current.lat);
-  const spawnCoordinates = spawnForZone(currentZone.x, currentZone.y);
+  const spawnCoordinates = resumeSession
+    ? [resumeSession.lng, resumeSession.lat] as [number, number]
+    : spawnForZone(currentZone.x, currentZone.y);
   const spawn = new maplibregl.LngLat(spawnCoordinates[0], spawnCoordinates[1]);
+  if (resumeSession) {
+    movementSpeed = resumeSession.movementSpeed;
+    const speedControl = document.querySelector<HTMLInputElement>("#game-speed");
+    const speedValue = document.querySelector<HTMLElement>("#game-speed-value");
+    if (speedControl) speedControl.value = String(movementSpeed);
+    if (speedValue) speedValue.textContent = String(movementSpeed);
+  }
   ensureGameLayers();
   setGameWorldVisibility(true);
   updateGameZone(spawn.lng, spawn.lat);
@@ -1336,7 +1430,7 @@ function startGameMode(): void {
   player.setAttribute("aria-label", "Player");
   playerMarker?.remove();
   playerMarker = new maplibregl.Marker({ element: player, anchor: "center" }).setLngLat(spawn).addTo(map);
-  map.easeTo({ center: spawn, zoom: Math.max(16, map.getZoom()), pitch: 0, bearing: 0, duration: 850 });
+  map.easeTo({ center: spawn, zoom: resumeSession?.zoom ?? Math.max(16, map.getZoom()), pitch: 0, bearing: 0, duration: 850 });
   $("#app").classList.add("game-mode");
   $("#game-mode-toggle").textContent = translations[language].exitGame;
   $("#game-zone-status").textContent = translations[language].zoneLoading;
@@ -1348,10 +1442,17 @@ function startGameMode(): void {
   selectedPlaceMarker?.remove();
   selectedPlaceMarker = null;
   updateGameHud();
-  showToast(language === "en" ? "Game mode enabled. Move with WASD or arrow keys." : "Mode jeu activé. Déplacez-vous avec ZQSD ou les flèches.");
+  lastSessionSaveAt = 0;
+  saveGameSession();
+  const resumePanel = document.querySelector<HTMLElement>("#resume-session");
+  if (resumePanel) resumePanel.hidden = true;
+  showToast(resumeSession
+    ? (language === "en" ? "Previous session restored." : "Session précédente restaurée.")
+    : (language === "en" ? "Game mode enabled. Move with WASD or arrow keys." : "Mode jeu activé. Déplacez-vous avec ZQSD ou les flèches."));
 }
 
 function stopGameMode(): void {
+  saveGameSession();
   gameMode = false;
   stopMovementLoop();
   setGameWorldVisibility(false);
@@ -1423,6 +1524,7 @@ function movementTick(time: number): void {
     playerMarker.setLngLat(next);
     map.jumpTo({ center: next });
     updateGameHud();
+    saveGameSession();
   }
   movementFrame = window.requestAnimationFrame(movementTick);
 }
@@ -1506,6 +1608,8 @@ map.on("load", () => {
   add3DBuildings();
   addPointsOfInterest();
   applyStreamingProfile();
+  savedGameSession = readSavedGameSession();
+  showSessionResumePrompt();
 });
 
 map.on("style.load", () => {
@@ -1585,9 +1689,10 @@ window.addEventListener("keydown", (event) => {
   setMovementKey(event.key, true);
 });
 window.addEventListener("keyup", (event) => setMovementKey(event.key, false));
-window.addEventListener("blur", stopMovementLoop);
+window.addEventListener("blur", () => { stopMovementLoop(); saveGameSession(); });
+window.addEventListener("pagehide", saveGameSession);
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) stopMovementLoop();
+  if (document.hidden) { stopMovementLoop(); saveGameSession(); }
 });
 document.querySelectorAll<HTMLButtonElement>("[data-move]").forEach((button) => {
   const keyByDirection: Record<string, string> = { up: "arrowup", down: "arrowdown", left: "arrowleft", right: "arrowright" };
@@ -1611,6 +1716,17 @@ speedControl.addEventListener("input", () => {
 });
 
 $("#game-clear-explored").addEventListener("click", clearExploredZones);
+$("#resume-session-continue").addEventListener("click", () => {
+  if (!savedGameSession) return;
+  const session = savedGameSession;
+  startGameMode(session);
+});
+$("#resume-session-new").addEventListener("click", () => {
+  clearSavedGameSession();
+  const panel = document.querySelector<HTMLElement>("#resume-session");
+  if (panel) panel.hidden = true;
+  startGameMode();
+});
 
 $("#globe-view").addEventListener("click", () => setMapView("globe"));
 
