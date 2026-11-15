@@ -625,6 +625,9 @@ function createMiniMap(): void {
     miniMapOverlaySignature = "";
     syncMiniMap(true);
   });
+  miniMap.on("idle", () => {
+    if (miniMapReady) document.querySelector<HTMLElement>("#game-mini-map")?.setAttribute("data-tiles-ready", "true");
+  });
   miniMap.on("error", (event) => {
     if (event.error) console.warn("Mini-map resource error:", event.error.message);
   });
