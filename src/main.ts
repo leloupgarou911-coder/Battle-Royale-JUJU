@@ -1016,9 +1016,7 @@ function updateStreamingHud(): void {
       ? translations[language].streamingPerformance
       : translations[language].streamingBalanced;
   $("#game-streaming-status").textContent = navigator.onLine ? label : translations[language].streamingOffline;
-  $("#game-streaming-detail").textContent = language === "en"
-    ? `Cache ${streamingProfile.zoneCacheLimit} · Ahead ${streamingProfile.prefetchDepth}`
-    : `Cache ${streamingProfile.zoneCacheLimit} · Avance ${streamingProfile.prefetchDepth}`;
+  $("#game-streaming-detail").textContent = `${translations[language].cacheLabel} ${streamingProfile.zoneCacheLimit} · ${translations[language].prefetchAheadLabel} ${streamingProfile.prefetchDepth}`;
 }
 
 function applyStreamingProfile(): void {
