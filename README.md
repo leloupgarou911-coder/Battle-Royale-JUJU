@@ -114,7 +114,7 @@ JUJU World uses the OpenFreeMap Liberty vector style with OpenStreetMap-based ge
 
 ## Multiple local save slots
 
-- The game supports up to 10 named local exploration saves. Each slot records the player's coordinates, 750 m zone, movement speed, zoom, and last update time.
+- The game supports up to 10 named local exploration saves. Each slot records the player's coordinates, nominal 750 m zone, movement speed in metres per second, zoom, and last update time.
 - Create a named save from the current map/player position, resume any saved slot, or delete an individual slot from the save panel.
 - While a slot is active in game mode, its position/settings are refreshed automatically. Starting a new exploration creates a separate automatic slot when the player begins moving.
 - The previous single-session save is migrated to a first save slot when possible.
@@ -125,7 +125,7 @@ JUJU World uses the OpenFreeMap Liberty vector style with OpenStreetMap-based ge
 ## Player progression
 
 - Every save slot stores its own XP, level (100 XP per level), distance, discovered map zones and cities, achievements, and reward titles.
-- Game movement measures geographic distance; each completed 25 metres awards 1 XP. First-time discovery of a 750 m game zone awards 25 XP. Selecting a city from the place search while in game mode records it once and awards 50 XP.
+- Player movement speed is adjustable from 1 to 12 metres per second using a geographic destination calculation, independent of map zoom. Each completed 25 metres travelled awards 1 XP. First-time discovery of a 750 m game zone awards 25 XP. Selecting a city from the place search while in game mode records it once and awards 50 XP.
 - Seven achievements cover first/5 zones, first/5 cities, 1 km/10 km travelled, and 500 XP. Each unlock grants a displayed badge or title.
 - Progress is saved inside the active local save slot and restored when that slot is resumed. Browser-wide visited-zone outlines remain a separate history.
 - City discovery currently means selecting a city through the in-game place search; it is not yet automatically detected from the player's coordinates. Progress remains local to the browser and is not cloud-synchronised.
