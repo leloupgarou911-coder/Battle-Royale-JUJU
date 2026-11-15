@@ -254,7 +254,6 @@ const map: MapLibreMap = new maplibregl.Map({
   renderWorldCopies: true,
   // Keep nearby vector tiles available as the player crosses world zones.
   maxTileCacheSize: 256,
-  minTileCacheSize: 64,
   dragRotate: false,
   pitchWithRotate: false,
   touchPitch: false,
@@ -566,6 +565,24 @@ function createZoneObstacles(zoneX: number, zoneY: number): GeoJSON.FeatureColle
     zoneObstacleCache.delete(oldestKey);
   }
   return collection;
+}
+
+function warmPredictiveZones(lng: number, lat: number, directionX: number, directionY: number): void {
+  const magnitude = Math.hypot(directionX, directionY);
+  if (magnitude < 0.01) return;
+  const origin = zoneFor(lng, lat);
+  const stepX = Math.sign(directionX);
+  const stepY = Math.sign(directionY);
+  // Prepare a small corridor in front of the player, including side zones for turns.
+  for (let distance = 1; distance <= 3; distance += 1) {
+    const centerX = origin.x + stepX * distance;
+    const centerY = origin.y + stepY * distance;
+    for (let side = -1; side <= 1; side += 1) {
+      const zoneX = centerX + (stepY !== 0 ? side : 0);
+      const zoneY = centerY + (stepX !== 0 ? side : 0);
+      createZoneObstacles(zoneX, zoneY);
+    }
+  }
 }
 
 function ensureGameLayers(): void {
@@ -1135,6 +1152,8 @@ function movementTick(time: number): void {
       return;
     }
     const activeDirection = [...heldDirections].map((key) => directionKeys[key]).filter(Boolean).at(-1);
+    // Warm deterministic scenery ahead of the current movement vector before entering it.
+    warmPredictiveZones(next.lng, next.lat, dx, dy);
     const playerElement = playerMarker.getElement();
     if (activeDirection) playerElement.dataset.direction = activeDirection.direction;
     playerElement.classList.add("is-moving");
