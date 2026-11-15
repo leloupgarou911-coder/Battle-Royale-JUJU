@@ -54,6 +54,31 @@ const translations = {
     playerAriaLabel: "Player",
     blocked: "BLOCKED",
     zoneSpawnLabel: "ZONE SPAWN",
+    gameHudAriaLabel: "Game controls",
+    progressAriaLabel: "Player progression",
+    dailyMissionsAriaLabel: "Daily missions",
+    miniMapAriaLabel: "Navigation mini-map",
+    gameTouchAriaLabel: "Touch movement controls",
+    interiorKicker: "JUJU WORLD · EXPLORATION",
+    interiorBoardAriaLabel: "Interactive fictional 2D building interior",
+    dailyMissionsTitle: "DAILY MISSIONS",
+    dailyMissionsRenew: "RENEWED EVERY DAY",
+    missionHistoryTitle: "MISSION HISTORY",
+    gameModeLabel: "GAME MODE",
+    activeZoneLabel: "ACTIVE ZONE",
+    playerLabel: "PLAYER",
+    topDownLabel: "TOP-DOWN",
+    localLabel: "LOCAL",
+    mainMenuLabel: "MAIN MENU",
+    saveNamePlaceholder: "Name this exploration",
+    saveNameAria: "Save name",
+    moveUpAria: "Move up",
+    moveDownAria: "Move down",
+    moveLeftAria: "Move left",
+    moveRightAria: "Move right",
+    closeDialogAria: "Close dialog",
+    closePlaceAria: "Close location details",
+    closeInteriorAria: "Leave building",
     globe: "3D GLOBE",
     buildings: "3D BUILDINGS",
     terrain: "3D TERRAIN",
@@ -178,6 +203,31 @@ const translations = {
     playerAriaLabel: "Joueur",
     blocked: "BLOQUÉ",
     zoneSpawnLabel: "POINT D’APPARITION",
+    gameHudAriaLabel: "Commandes du jeu",
+    progressAriaLabel: "Progression du joueur",
+    dailyMissionsAriaLabel: "Missions quotidiennes",
+    miniMapAriaLabel: "Mini-carte de navigation",
+    gameTouchAriaLabel: "Commandes tactiles de déplacement",
+    interiorKicker: "JUJU WORLD · EXPLORATION",
+    interiorBoardAriaLabel: "Intérieur fictif interactif en 2D",
+    dailyMissionsTitle: "MISSIONS QUOTIDIENNES",
+    dailyMissionsRenew: "RENOUVELÉES CHAQUE JOUR",
+    missionHistoryTitle: "HISTORIQUE DES MISSIONS",
+    gameModeLabel: "MODE JEU",
+    activeZoneLabel: "ZONE ACTIVE",
+    playerLabel: "JOUEUR",
+    topDownLabel: "VUE AÉRIENNE",
+    localLabel: "LOCAL",
+    mainMenuLabel: "MENU PRINCIPAL",
+    saveNamePlaceholder: "Nom de cette exploration",
+    saveNameAria: "Nom de la sauvegarde",
+    moveUpAria: "Aller vers le haut",
+    moveDownAria: "Aller vers le bas",
+    moveLeftAria: "Aller vers la gauche",
+    moveRightAria: "Aller vers la droite",
+    closeDialogAria: "Fermer la fenêtre",
+    closePlaceAria: "Fermer les détails du lieu",
+    closeInteriorAria: "Quitter le bâtiment",
     globe: "GLOBE 3D",
     buildings: "BÂTIMENTS 3D",
     terrain: "RELIEF 3D",
@@ -910,6 +960,17 @@ function setLanguage(next: Language): void {
     }
   });
   searchInput.placeholder = translations[next].search;
+  const saveNameInput = document.querySelector<HTMLInputElement>("#save-slot-name");
+  if (saveNameInput) {
+    saveNameInput.placeholder = translations[next].saveNamePlaceholder;
+    saveNameInput.setAttribute("aria-label", translations[next].saveNameAria);
+  }
+  document.querySelectorAll<HTMLElement>("[data-i18n-aria]").forEach((element) => {
+    const key = element.dataset.i18nAria ?? "";
+    if (key in translations[next]) element.setAttribute("aria-label", translations[next][key as keyof typeof translations.en]);
+  });
+  $("#game-player-status").textContent = translations[next].playerReady;
+  playerMarker?.getElement().setAttribute("aria-label", translations[next].playerAriaLabel);
   renderPlayerProgress();
   renderDailyMissions();
   $("#language-toggle").textContent = next === "en" ? "FR" : "EN";
