@@ -18,6 +18,7 @@
 - Progressive world streaming: MapLibre requests vector tiles for the visible area as the camera moves, across all countries.
 - Game-zone scenery cache: the active 750 m zone and eight neighbours are displayed, while a second ring is prepared and recent zone scenery is kept in a bounded cache.
 - Game HUD reports nearby map-tile loading and readiness instead of assuming every new area is instantly available.
+- Directional predictive scenery preloading: while moving, JUJU prepares procedural scenery in a short corridor ahead of the player, including adjacent side zones for turns.
 
 ## Technology
 
@@ -58,6 +59,7 @@ npm run preview
 - Click a POI marker to view its mapped name and category.
 - The same POI categories work worldwide; what appears depends on the local OpenStreetMap/OpenMapTiles coverage.
 - In game mode, the map streams new vector tiles around the camera as the player moves. Nearby scenery is cached so revisiting recently explored zones is lighter.
+- While the player moves, the game predicts the current heading and warms the next three rows of procedural scenery ahead, without generating the whole world.
 
 ## Deployment
 
@@ -71,7 +73,7 @@ In GitHub, open **Settings → Pages** and select **GitHub Actions** as the buil
 2. Better 3D city visualization and terrain.
 3. Select a pilot area after testing the map.
 4. Add game-ready zones and fictional interiors.
-5. Expand streaming tests and tune tile/scenery cache limits for different devices and connection speeds.
+5. Add predictive vector-tile viewport tests and tune tile/scenery cache limits for different devices and connection speeds.
 6. Add multiplayer architecture after the exploration prototype is stable.
 
 ## Attribution and privacy
