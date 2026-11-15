@@ -27,6 +27,8 @@ test("home screen, French localization and settings render at this viewport", as
   await expect(page.locator(".game-hud")).toBeVisible();
   await expect(page.locator(".game-mini-map-panel")).toBeVisible();
   await expect(page.locator("#game-mini-map .maplibregl-canvas")).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator("#game-mini-map")).toHaveAttribute("data-tiles-ready", "true", { timeout: 30_000 });
+  await expect(page.locator("#game-zone-status")).not.toContainText(/CHARGEMENT|LOADING/, { timeout: 30_000 });
   await page.locator(".game-hud").screenshot({ path: testInfo.outputPath("game-hud.png"), animations: "disabled" });
 
   const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
