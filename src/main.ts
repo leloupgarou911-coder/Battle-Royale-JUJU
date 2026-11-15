@@ -111,6 +111,9 @@ let toastTimeout = 0;
 let selectedPlaceMarker: maplibregl.Marker | null = null;
 let gameMode = false;
 let playerMarker: maplibregl.Marker | null = null;
+let activeZoneKey = "";
+const GAME_ZONE_METERS = 750;
+const WORLD_METERS = 40075016.68557849;
 
 const map: MapLibreMap = new maplibregl.Map({
   container: "map",
@@ -341,9 +344,108 @@ function disableTerrain(): void {
   $("#terrain-view").classList.remove("active");
 }
 
+function mercatorPosition(lng: number, lat: number): { x: number; y: number } {
+  const clampedLat = Math.max(-85.051129, Math.min(85.051129, lat));
+  const radians = clampedLat * Math.PI / 180;
+  return {
+    x: (lng + 180) / 360,
+    y: (1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2,
+  };
+}
+
+function zoneFor(lng: number, lat: number): { x: number; y: number; key: string } {
+  const size = GAME_ZONE_METERS / WORLD_METERS;
+  const point = mercatorPosition(lng, lat);
+  const x = Math.floor(point.x / size);
+  const y = Math.floor(point.y / size);
+  return { x, y, key: `${x}:${y}` };
+}
+
+function zonePolygon(zoneX: number, zoneY: number): GeoJSON.Feature<GeoJSON.Polygon> {
+  const size = GAME_ZONE_METERS / WORLD_METERS;
+  const west = zoneX * size;
+  const east = west + size;
+  const north = zoneY * size;
+  const south = north + size;
+  const toLngLat = (x: number, y: number): [number, number] => [
+    x * 360 - 180,
+    Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180 / Math.PI,
+  ];
+  return {
+    type: "Feature",
+    properties: {},
+    geometry: { type: "Polygon", coordinates: [[
+      toLngLat(west, north), toLngLat(east, north),
+      toLngLat(east, south), toLngLat(west, south),
+      toLngLat(west, north),
+    ]] },
+  };
+}
+
+function ensureGameLayers(): void {
+  if (!map.getSource("openmaptiles")) return;
+  if (!map.getLayer("juju-collision-buildings")) {
+    map.addLayer({
+      id: "juju-collision-buildings",
+      type: "fill",
+      source: "openmaptiles",
+      "source-layer": "building",
+      minzoom: 15,
+      filter: ["==", ["geometry-type"], "Polygon"],
+      paint: { "fill-color": "#ffffff", "fill-opacity": 0.015 },
+    });
+  }
+  if (!map.getSource("juju-active-zone")) {
+    map.addSource("juju-active-zone", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    map.addLayer({
+      id: "juju-zone-fill",
+      type: "fill",
+      source: "juju-active-zone",
+      paint: { "fill-color": "#e4b77f", "fill-opacity": 0.045 },
+    });
+    map.addLayer({
+      id: "juju-zone-outline",
+      type: "line",
+      source: "juju-active-zone",
+      paint: { "line-color": "#e4b77f", "line-width": 2, "line-dasharray": [3, 2], "line-opacity": 0.9 },
+    });
+  }
+}
+
+function updateGameZone(lng: number, lat: number): void {
+  const zone = zoneFor(lng, lat);
+  if (zone.key === activeZoneKey) return;
+  activeZoneKey = zone.key;
+  const source = map.getSource("juju-active-zone") as maplibregl.GeoJSONSource | undefined;
+  source?.setData(zonePolygon(zone.x, zone.y));
+  $("#game-zone-status").textContent = `ZONE ${zone.x} · ${zone.y}`;
+  map.once("idle", () => {
+    if (gameMode && activeZoneKey === zone.key) {
+      $("#game-zone-status").textContent = `ZONE ${zone.x} · ${zone.y} · READY`;
+    }
+  });
+}
+
 function updateGameHud(): void {
   const center = map.getCenter();
-  $("#game-zone-coordinates").textContent = `${center.lat.toFixed(3)}, ${center.lng.toFixed(3)}`;
+  $("#game-zone-coordinates").textContent = `${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`;
+  updateGameZone(center.lng, center.lat);
+}
+
+function isBuildingCollision(lng: number, lat: number): boolean {
+  if (!map.getLayer("juju-collision-buildings") || map.getZoom() < 15) return false;
+  const point = map.project([lng, lat]);
+  const radius = 7;
+  const samples: [number, number][] = [
+    [0, 0], [radius, 0], [-radius, 0], [0, radius], [0, -radius],
+  ];
+  return samples.some(([dx, dy]) => map.queryRenderedFeatures(
+    [point.x + dx, point.y + dy],
+    { layers: ["juju-collision-buildings"] },
+  ).length > 0);
 }
 
 function startGameMode(): void {
@@ -355,6 +457,8 @@ function startGameMode(): void {
   map.dragRotate.disable();
   map.touchZoomRotate.disableRotation();
   const spawn = map.getCenter();
+  ensureGameLayers();
+  updateGameZone(spawn.lng, spawn.lat);
   const player = document.createElement("div");
   player.className = "juju-player";
   player.setAttribute("role", "img");
@@ -390,6 +494,11 @@ function movePlayer(dx: number, dy: number): void {
   const center = map.getCenter();
   const point = map.project(center);
   const next = map.unproject([point.x + dx, point.y + dy]);
+  if (isBuildingCollision(next.lng, next.lat)) {
+    $("#game-player-status").textContent = language === "en" ? "BLOCKED" : "BLOQUÉ";
+    return;
+  }
+  $("#game-player-status").textContent = translations[language].playerReady;
   playerMarker.setLngLat(next);
   map.easeTo({ center: next, duration: 90, easing: (t) => t });
   updateGameHud();
@@ -428,6 +537,7 @@ function setMapView(view: "flat" | "globe"): void {
 map.on("moveend", () => { if (gameMode) updateGameHud(); });
 
 map.on("load", () => {
+  ensureGameLayers();
   mapStatus.textContent = translations[language].ready;
   map.setProjection({ type: "mercator" });
   map.easeTo({ pitch: 0, bearing: 0, duration: 0 });
@@ -438,6 +548,7 @@ map.on("load", () => {
 });
 
 map.on("style.load", () => {
+  ensureGameLayers();
   add3DBuildings();
   addPointsOfInterest();
 });
@@ -471,6 +582,8 @@ $("#game-mode-toggle").addEventListener("click", () => gameMode ? stopGameMode()
 $("#game-zone-reload").addEventListener("click", () => {
   if (!gameMode) return;
   map.resize();
+  ensureGameLayers();
+  updateGameZone(map.getCenter().lng, map.getCenter().lat);
   map.triggerRepaint();
   updateGameHud();
   $("#game-zone-status").textContent = translations[language].zoneReady;
