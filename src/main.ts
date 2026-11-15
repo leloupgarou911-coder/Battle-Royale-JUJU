@@ -33,6 +33,9 @@ const translations = {
     saveSlotsTitle: "SAVED EXPLORATIONS",
     saveSlotsDescription: "Choose a save to continue or create a new one.",
     saveSlotCreate: "SAVE CURRENT",
+    progressTitle: "PLAYER PROGRESSION", progressLevel: "LEVEL", progressNext: "NEXT LEVEL",
+    progressDistance: "DISTANCE", progressZones: "ZONES", progressCities: "CITIES",
+    progressAchievements: "ACHIEVEMENTS", progressRewards: "UNLOCKED REWARDS",
     moveHelp: "WASD / ARROWS TO MOVE",
     playerReady: "PLAYER READY",
     globe: "3D GLOBE",
@@ -148,6 +151,9 @@ const translations = {
     saveSlotsTitle: "EXPLORATIONS SAUVEGARDÉES",
     saveSlotsDescription: "Choisissez une sauvegarde ou créez-en une nouvelle.",
     saveSlotCreate: "ENREGISTRER",
+    progressTitle: "PROGRESSION DU JOUEUR", progressLevel: "NIVEAU", progressNext: "NIVEAU SUIVANT",
+    progressDistance: "DISTANCE", progressZones: "ZONES", progressCities: "VILLES",
+    progressAchievements: "SUCCÈS", progressRewards: "RÉCOMPENSES DÉBLOQUÉES",
     moveHelp: "ZQSD / FLÈCHES POUR BOUGER",
     playerReady: "JOUEUR PRÊT",
     globe: "GLOBE 3D",
@@ -315,12 +321,52 @@ interface SavedGameSession {
   zoom: number;
   savedAt: number;
 }
+interface PlayerProgress { xp:number; distanceMeters:number; remainder:number; zones:string[]; cities:string[]; achievements:string[] }
 interface SavedGameSlot {
-  id: string;
-  name: string;
-  session: SavedGameSession;
-  createdAt: number;
-  updatedAt: number;
+  id:string; name:string; session:SavedGameSession; progress:PlayerProgress; createdAt:number; updatedAt:number;
+}
+const emptyProgress=():PlayerProgress=>({xp:0,distanceMeters:0,remainder:0,zones:[],cities:[],achievements:[]});
+const achievementDefs=[
+ {id:"zone1",en:"First Steps",fr:"Premiers pas",rewardEn:"Explorer badge",rewardFr:"Badge explorateur",test:(p:PlayerProgress)=>p.zones.length>=1},
+ {id:"zone5",en:"Pathfinder",fr:"Éclaireur",rewardEn:"Pathfinder badge",rewardFr:"Badge éclaireur",test:(p:PlayerProgress)=>p.zones.length>=5},
+ {id:"city1",en:"City Scout",fr:"Repéreur urbain",rewardEn:"City Scout title",rewardFr:"Titre repéreur urbain",test:(p:PlayerProgress)=>p.cities.length>=1},
+ {id:"city5",en:"Globe Trotter",fr:"Globe-trotteur",rewardEn:"Globe Trotter title",rewardFr:"Titre globe-trotteur",test:(p:PlayerProgress)=>p.cities.length>=5},
+ {id:"km1",en:"First Kilometer",fr:"Premier kilomètre",rewardEn:"Traveler badge",rewardFr:"Badge voyageur",test:(p:PlayerProgress)=>p.distanceMeters>=1000},
+ {id:"km10",en:"Long-Distance Explorer",fr:"Grand explorateur",rewardEn:"Veteran badge",rewardFr:"Badge vétéran",test:(p:PlayerProgress)=>p.distanceMeters>=10000},
+ {id:"xp500",en:"Rising Explorer",fr:"Explorateur confirmé",rewardEn:"500 XP milestone",rewardFr:"Palier des 500 XP",test:(p:PlayerProgress)=>p.xp>=500},
+];
+function normalizeProgress(v:unknown):PlayerProgress {
+ if(!v||typeof v!=="object")return emptyProgress();const p=v as Partial<PlayerProgress>;
+ return {xp:Number.isFinite(p.xp)?Math.max(0,Math.floor(p.xp!)):0,distanceMeters:Number.isFinite(p.distanceMeters)?Math.max(0,p.distanceMeters!):0,remainder:Number.isFinite(p.remainder)?Math.max(0,Math.min(24.999,p.remainder!)):0,zones:Array.isArray(p.zones)?p.zones.filter((x):x is string=>typeof x==="string").slice(-1000):[],cities:Array.isArray(p.cities)?p.cities.filter((x):x is string=>typeof x==="string").slice(-200):[],achievements:Array.isArray(p.achievements)?p.achievements.filter((x):x is string=>typeof x==="string"):[]};
+}
+function activeSlot():SavedGameSlot|undefined{return savedGameSlots.find(x=>x.id===activeSaveSlotId);}
+function checkAchievements(p:PlayerProgress):void {
+ achievementDefs.forEach(a=>{if(!p.achievements.includes(a.id)&&a.test(p)){p.achievements.push(a.id);showToast(language==="fr"?`Succès débloqué : ${a.fr} · ${a.rewardFr}`:`Achievement unlocked: ${a.en} · ${a.rewardEn}`);}});
+}
+function saveProgress():void {const slot=activeSlot();if(!slot)return;slot.updatedAt=Date.now();persistSavedGameSlots();renderSavedGameSlots();renderPlayerProgress();}
+function discoverProgressZone(x:number,y:number):void {
+ const slot=activeSlot();if(!slot)return;const key=`${x}:${y}`;if(slot.progress.zones.includes(key))return;
+ slot.progress.zones.push(key);if(slot.progress.zones.length>1000)slot.progress.zones.shift();slot.progress.xp+=25;checkAchievements(slot.progress);saveProgress();
+}
+function discoverProgressCity(name:string,country?:string):void {
+ const slot=activeSlot();if(!slot)return;const key=`${name.trim().toLocaleLowerCase()}|${(country??"").trim().toLocaleLowerCase()}`;if(!name.trim()||slot.progress.cities.includes(key))return;
+ slot.progress.cities.push(key);if(slot.progress.cities.length>200)slot.progress.cities.shift();slot.progress.xp+=50;checkAchievements(slot.progress);saveProgress();
+}
+function addTravelDistance(from:maplibregl.LngLat,to:maplibregl.LngLat):void {
+ const slot=activeSlot();if(!slot)return;const rad=Math.PI/180,lat1=from.lat*rad,lat2=to.lat*rad,dLat=(to.lat-from.lat)*rad,dLng=(to.lng-from.lng)*rad;
+ const a=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
+ const meters=6371000*2*Math.atan2(Math.sqrt(a),Math.sqrt(Math.max(0,1-a)));if(!Number.isFinite(meters)||meters<=0||meters>100)return;
+ slot.progress.distanceMeters+=meters;const total=slot.progress.remainder+meters;const xp=Math.floor(total/25);slot.progress.remainder=total-xp*25;if(xp>0)slot.progress.xp+=xp;
+ checkAchievements(slot.progress);if(xp>0)saveProgress();else renderPlayerProgress();
+}
+function renderPlayerProgress():void {
+ const p=activeSlot()?.progress??emptyProgress(),level=Math.floor(p.xp/100)+1,within=p.xp%100;
+ const set=(id:string,value:string)=>{const el=document.querySelector<HTMLElement>(id);if(el)el.textContent=value;};
+ set("#progress-level",String(level));set("#progress-xp",`${within} / 100 XP · ${p.xp} total`);
+ const bar=document.querySelector<HTMLElement>("#progress-xp-bar");if(bar)bar.style.width=`${within}%`;
+ set("#progress-distance",p.distanceMeters>=1000?`${(p.distanceMeters/1000).toFixed(2)} km`:`${Math.floor(p.distanceMeters)} m`);
+ set("#progress-zones",String(p.zones.length));set("#progress-cities",String(p.cities.length));set("#progress-achievements",`${p.achievements.length} / ${achievementDefs.length}`);
+ const rewards=document.querySelector<HTMLElement>("#progress-rewards");if(rewards){rewards.replaceChildren();const unlocked=achievementDefs.filter(a=>p.achievements.includes(a.id));if(!unlocked.length){const empty=document.createElement("span");empty.textContent=language==="fr"?"Aucun succès pour le moment":"No achievements yet";rewards.append(empty);}unlocked.forEach(a=>{const badge=document.createElement("span");badge.className="progress-reward";badge.textContent=language==="fr"?a.rewardFr:a.rewardEn;rewards.append(badge);});}
 }
 let savedGameSlots: SavedGameSlot[] = [];
 let activeSaveSlotId: string | null = null;
@@ -348,6 +394,7 @@ function loadSavedGameSlots(): void {
         ).map((item) => ({
           ...item,
           name: item.name.trim().slice(0, 32) || "Exploration",
+          progress: normalizeProgress(item.progress),
           session: {
             ...item.session,
             movementSpeed: Math.max(80, Math.min(360, item.session.movementSpeed)),
@@ -365,6 +412,7 @@ function loadSavedGameSlots(): void {
             id: "legacy-" + now,
             name: "Exploration 1",
             session: legacy,
+            progress: emptyProgress(),
             createdAt: legacy.savedAt,
             updatedAt: legacy.savedAt,
           }];
@@ -410,6 +458,7 @@ function saveGameSession(force = false): void {
       id: `save-${now}-${Math.random().toString(36).slice(2, 7)}`,
       name: `${language === "fr" ? "Exploration" : "Exploration"} ${savedGameSlots.length + 1}`,
       session,
+      progress: emptyProgress(),
       createdAt: now,
       updatedAt: now,
     };
@@ -439,6 +488,7 @@ function createNamedSaveSlot(): void {
     id: `save-${now}-${Math.random().toString(36).slice(2, 7)}`,
     name,
     session,
+    progress: emptyProgress(),
     createdAt: now,
     updatedAt: now,
   };
@@ -479,7 +529,7 @@ function renderSavedGameSlots(): void {
     const date = new Date(slot.updatedAt).toLocaleString(language === "fr" ? "fr-FR" : "en-GB");
     meta.textContent = `${language === "fr" ? "Zone" : "Zone"} ${slot.session.zoneX}, ${slot.session.zoneY} · ${date}`;
     const progress = document.createElement("small");
-    progress.textContent = `${language === "fr" ? "Vitesse" : "Speed"}: ${slot.session.movementSpeed} · Zoom: ${slot.session.zoom.toFixed(1)}`;
+    progress.textContent = `${language === "fr" ? "Niveau" : "Level"} ${Math.floor(slot.progress.xp / 100) + 1} · ${slot.progress.xp} XP · ${slot.progress.zones.length} zones`;
     info.append(title, meta, progress);
     const actions = document.createElement("div");
     actions.className = "save-slot-actions";
@@ -508,6 +558,7 @@ function clearActiveSaveSlot(): void {
 function showSessionResumePrompt(): void {
   loadSavedGameSlots();
   renderSavedGameSlots();
+  renderPlayerProgress();
   const panel = document.querySelector<HTMLElement>("#resume-session");
   if (panel) panel.hidden = savedGameSlots.length === 0;
 }
@@ -629,6 +680,7 @@ function setLanguage(next: Language): void {
     }
   });
   searchInput.placeholder = translations[next].search;
+  renderPlayerProgress();
   $("#language-toggle").textContent = next === "en" ? "FR" : "EN";
   $("#language-toggle").setAttribute("aria-label", next === "en" ? "Passer en français" : "Switch to English");
 }
@@ -657,6 +709,7 @@ function selectPlace(place: PlaceResult): void {
   });
   searchResults.replaceChildren();
   searchInput.value = place.name;
+  if (gameMode) discoverProgressCity(place.name, place.country);
 }
 
 function add3DBuildings(): void {
@@ -1237,6 +1290,7 @@ function updateGameZone(lng: number, lat: number): void {
   if (zone.key === activeZoneKey) return;
   activeZoneKey = zone.key;
   recordExploredZone(zone.x, zone.y);
+  if (gameMode) discoverProgressZone(zone.x, zone.y);
   protectedZoneKeys = new Set<string>();
   for (let x = -1; x <= 1; x += 1) {
     for (let y = -1; y <= 1; y += 1) protectedZoneKeys.add(`${zone.x + x}:${zone.y + y}`);
@@ -1580,9 +1634,13 @@ function startGameMode(resumeSession: SavedGameSession | null = null): void {
   updateGameHud();
   lastSessionSaveAt = 0;
   saveGameSession();
+  const spawnZone = zoneFor(spawn.lng, spawn.lat);
+  discoverProgressZone(spawnZone.x, spawnZone.y);
+  renderPlayerProgress();
   renderSavedGameSlots();
   const savePanel = document.querySelector<HTMLElement>("#resume-session");
   if (savePanel) savePanel.hidden = true;
+  renderPlayerProgress();
   showToast(resumeSession
     ? (language === "en" ? "Previous session restored." : "Session précédente restaurée.")
     : (language === "en" ? "Game mode enabled. Move with WASD or arrow keys." : "Mode jeu activé. Déplacez-vous avec ZQSD ou les flèches."));
@@ -1651,6 +1709,7 @@ function movementTick(time: number): void {
       return;
     }
     const activeDirection = [...heldDirections].map((key) => directionKeys[key]).filter(Boolean).at(-1);
+    addTravelDistance(center, next);
     // Warm deterministic scenery ahead of the current movement vector before entering it.
     warmPredictiveZones(next.lng, next.lat, dx, dy);
     void prefetchVectorTilesAhead(next.lng, next.lat, dx, dy);
