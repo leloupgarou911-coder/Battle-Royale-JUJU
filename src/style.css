@@ -283,3 +283,13 @@ h1 span { color: var(--gold); }
 /* Local exploration history */
 .game-clear-explored { width: 100%; min-height: 29px; margin-top: 8px; border: 1px solid rgba(255,255,255,.12); border-radius: 5px; background: rgba(255,255,255,.035); color: #aeb9bf; font: 700 8px "DM Sans",sans-serif; letter-spacing: .08em; cursor: pointer; }
 .game-clear-explored:hover { border-color: rgba(120,214,176,.55); color: #d5f3e5; background: rgba(120,214,176,.08); }
+
+
+/* Resume previous local game session */
+.resume-session { position: absolute; z-index: 12; top: 50%; left: 50%; width: min(390px, calc(100% - 32px)); transform: translate(-50%, -50%); padding: 20px; border: 1px solid rgba(120,214,176,.35); border-radius: 10px; background: rgba(12,19,22,.96); box-shadow: 0 18px 60px rgba(0,0,0,.4); color: #edf4f1; }
+.resume-session[hidden] { display: none; }
+.resume-session strong { font-size: 12px; letter-spacing: .1em; }
+.resume-session p { margin: 10px 0 16px; color: #aab8b2; font-size: 12px; line-height: 1.5; }
+.resume-session div { display: flex; flex-wrap: wrap; gap: 8px; }
+.resume-session button { flex: 1; min-height: 36px; padding: 8px 12px; border: 1px solid rgba(120,214,176,.45); border-radius: 5px; background: rgba(120,214,176,.12); color: #e5f5ed; font: 700 10px "DM Sans",sans-serif; cursor: pointer; }
+.resume-session button + button { border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.05); color: #b8c1c4; }
