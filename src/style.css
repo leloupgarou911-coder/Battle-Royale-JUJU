@@ -339,3 +339,158 @@ h1 span { color: var(--gold); }
 .mission-history-item strong{font-weight:600}
 .mission-history-item span{color:#91a49b;white-space:nowrap}
 .mission-history>p:not(.mission-history-item){margin:0;color:#91a49b;font-size:9px}
+
+
+/* JUJU WORLD visual refresh — unified site and in-game interface */
+:root{
+  --gold:#f0b96f;
+  --panel:rgba(8,17,25,.94);
+  --muted:#9aaab6;
+  --juju-cyan:#78d9d0;
+  --juju-line:rgba(148,190,198,.17);
+}
+body{background:#07111a;color:#edf5f7}
+#map{background:#102431}
+.panel{
+  inset:16px auto 16px 16px;width:380px;
+  border:1px solid rgba(120,217,208,.22);border-radius:18px;
+  background:linear-gradient(155deg,rgba(13,28,39,.97),rgba(7,17,26,.96));
+  box-shadow:0 24px 80px rgba(0,0,0,.48),inset 0 1px rgba(255,255,255,.035);
+  backdrop-filter:blur(24px);
+}
+.panel-top{min-height:82px;padding:0 22px;border-bottom:1px solid var(--juju-line)}
+.brand{gap:13px}
+.brand-mark{
+  width:42px;height:42px;border:1px solid rgba(120,217,208,.8);border-radius:12px;
+  background:linear-gradient(145deg,rgba(120,217,208,.17),rgba(240,185,111,.08));
+  color:#a5eee5;font-size:24px;box-shadow:0 0 26px rgba(120,217,208,.1)
+}
+.brand-copy{font-size:13px;letter-spacing:.16em}
+.brand-copy small{color:#8fa6b2;font-size:8px;letter-spacing:.2em}
+.language-button{border-color:rgba(120,217,208,.35);border-radius:8px;background:rgba(120,217,208,.07);color:#9ce6df;padding:9px 12px}
+.panel-content{padding:25px 22px 22px;scrollbar-color:#38535c transparent}
+.eyebrow{display:flex;align-items:center;gap:8px;color:#8fe2d9;font-size:9px;letter-spacing:.19em}
+.eyebrow:before{content:"";width:18px;height:1px;background:var(--gold)}
+h1{font-size:40px;line-height:1.02;letter-spacing:-.06em}
+h1 span{color:#8edfd6}
+.intro-copy{max-width:310px;color:#a8bac4;font-size:12px;line-height:1.75}
+.search-box{height:50px;border-color:rgba(143,196,201,.24);border-radius:10px;background:rgba(255,255,255,.045);transition:border-color .18s,background .18s}
+.search-box:focus-within{border-color:rgba(120,217,208,.72);background:rgba(120,217,208,.06);box-shadow:0 0 0 3px rgba(120,217,208,.07)}
+.search-icon{color:#8fe2d9}
+.search-box input{font-size:12px}
+.search-box button{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#9ce8df,#69c9c3);color:#09202a;font-weight:800}
+.section-heading{margin:25px 0 12px;color:#8ea4ae;font-size:9px;letter-spacing:.19em}
+.section-line{background:var(--juju-line)}
+.quick-places{gap:8px}
+.quick-places button{
+  padding:11px 12px;border:1px solid rgba(143,196,201,.14);border-radius:9px;
+  background:rgba(255,255,255,.035);color:#dbe9ed;transition:.18s
+}
+.quick-places button:hover{transform:translateY(-1px);border-color:rgba(120,217,208,.48);background:rgba(120,217,208,.08)}
+.quick-places button span{color:#8edfd6}
+.view-controls{gap:8px}
+.view-button{min-height:66px;border-radius:9px;border-color:rgba(143,196,201,.15);background:rgba(255,255,255,.03)}
+.view-button span{color:#8edfd6;font-size:20px}
+.view-button b{font-size:8px;letter-spacing:.08em}
+.view-button.active{border-color:rgba(120,217,208,.58);background:linear-gradient(145deg,rgba(120,217,208,.13),rgba(120,217,208,.045));box-shadow:inset 0 0 0 1px rgba(120,217,208,.08)}
+.game-camera-button{min-height:43px;margin-top:10px;border:1px solid rgba(240,185,111,.36);border-radius:9px;background:linear-gradient(100deg,rgba(240,185,111,.12),rgba(240,185,111,.035));color:#f2c98f;font-size:9px;letter-spacing:.1em}
+.places-toggle{min-height:42px;border-radius:9px;border-color:rgba(120,217,208,.28);background:rgba(120,217,208,.06)}
+.places-toggle b{color:#a5e9e2}
+.poi-legend{padding:12px;border:1px solid rgba(143,196,201,.1);border-radius:10px;background:rgba(255,255,255,.025);gap:10px 8px}
+.poi-legend>span{font-size:9px;color:#a9bbc4}
+.panel-footer{min-height:45px;border-top:1px solid var(--juju-line);font-size:8px}
+.live-dot{box-shadow:0 0 10px #75dfb1}
+.version{color:#7d929d}
+.maplibregl-ctrl-group{border:1px solid rgba(143,196,201,.2)!important;border-radius:10px!important;background:rgba(8,17,25,.9)!important;backdrop-filter:blur(12px)}
+.maplibregl-ctrl-group button{background-color:transparent!important}
+.maplibregl-ctrl-group button+button{border-top-color:rgba(143,196,201,.15)!important}
+.maplibregl-ctrl button .maplibregl-ctrl-icon{filter:invert(.85) sepia(.12) saturate(.6)}
+.maplibregl-ctrl-bottom-left{left:402px}
+.maplibregl-ctrl-attrib{border-radius:7px 0 0 0!important;background:rgba(8,17,25,.78)!important;color:#b5c5cb!important}
+.maplibregl-ctrl-attrib a{color:#9ce6df!important}
+.place-card{
+  border:1px solid rgba(120,217,208,.25);border-radius:14px;
+  background:linear-gradient(150deg,rgba(10,24,34,.97),rgba(7,16,24,.96));
+  box-shadow:0 20px 60px rgba(0,0,0,.42);backdrop-filter:blur(20px)
+}
+.place-card-label,.place-card-coordinate-label{color:#8edfd6;letter-spacing:.15em}
+.place-card h2{font-family:"Space Grotesk",sans-serif;letter-spacing:-.035em}
+.place-card-actions button{border-radius:8px}
+.game-hud{
+  top:16px;right:16px;width:min(370px,calc(100vw - 32px));padding:15px;
+  border:1px solid rgba(120,217,208,.24);border-radius:16px;
+  background:linear-gradient(155deg,rgba(9,22,31,.96),rgba(6,15,23,.95));
+  box-shadow:0 22px 70px rgba(0,0,0,.45);backdrop-filter:blur(22px)
+}
+.game-hud-top{padding-bottom:11px;border-bottom:1px solid var(--juju-line)}
+.game-hud-brand{color:#8fe2d9;font-size:13px;letter-spacing:.15em}
+.game-hud-brand b{color:#f0c58c}
+#game-player-status{color:#9de2c1;font-size:8px;letter-spacing:.1em}
+.game-hud-stats{margin:11px 0;padding:12px 0;border-color:var(--juju-line);gap:9px}
+.game-hud-stats>div{padding:0 3px}
+.game-hud-stats small{color:#8ca3ae;font-size:7px;letter-spacing:.13em}
+.game-hud-stats strong{color:#edf7f7;font-size:10px}
+.game-hud-stats span{color:#a5b8c1;font-size:8px}
+.player-progress-panel,.daily-missions-panel{
+  border:1px solid rgba(120,217,208,.16);border-radius:11px;
+  background:rgba(255,255,255,.035);box-shadow:inset 0 1px rgba(255,255,255,.025)
+}
+.progress-heading>span,.progress-heading>b{color:#9ce6df}
+.progress-xp-track span{background:linear-gradient(90deg,#65cfc6,#f0bd78)}
+.progress-stats>div{padding:7px 6px;border:1px solid rgba(143,196,201,.09);border-radius:7px;background:rgba(255,255,255,.025)}
+.progress-stats strong{font-family:"Space Grotesk",sans-serif;font-size:13px}
+.progress-reward{border-color:rgba(120,217,208,.25);background:rgba(120,217,208,.08);color:#a5e9e2!important}
+.daily-mission-card{border-color:rgba(143,196,201,.1);border-radius:8px;background:rgba(255,255,255,.025)}
+.daily-mission-top span{color:#a5e9e2}
+.mission-progress-track span{background:linear-gradient(90deg,#62c9c1,#e9bd7d)}
+.game-speed-control{padding:10px;border:1px solid rgba(143,196,201,.12);border-radius:9px;background:rgba(255,255,255,.025)}
+.game-speed-control label{color:#a7bbc4;font-size:8px;letter-spacing:.09em}
+.game-speed-control label strong{color:#9ce6df}
+.game-speed-control input{accent-color:#79d9d0}
+.game-hud-actions{gap:8px}
+.game-hud-actions button{min-height:39px;border-color:rgba(120,217,208,.34);border-radius:8px;background:rgba(120,217,208,.08);color:#c7f1ec;font-size:8px;letter-spacing:.08em}
+.game-hud-actions button:last-child{border-color:rgba(240,185,111,.5);background:linear-gradient(100deg,rgba(240,185,111,.2),rgba(240,185,111,.08));color:#f4d4a6}
+.game-hud-actions button:hover{filter:brightness(1.2);transform:translateY(-1px)}
+.game-clear-explored{border-radius:8px;border-color:rgba(143,196,201,.14)}
+.game-touch-controls button{border:1px solid rgba(120,217,208,.32);border-radius:12px;background:rgba(8,20,29,.86);color:#a9eee6;box-shadow:0 8px 24px rgba(0,0,0,.3);backdrop-filter:blur(12px)}
+.map-hint{border:1px solid rgba(143,196,201,.15);border-radius:9px;background:rgba(8,17,25,.78);color:#b8c8ce;backdrop-filter:blur(12px)}
+.resume-session,.interior-panel{
+  border:1px solid rgba(120,217,208,.28);border-radius:16px;
+  background:linear-gradient(150deg,rgba(10,24,34,.98),rgba(7,16,24,.98));
+  box-shadow:0 28px 90px rgba(0,0,0,.55);backdrop-filter:blur(24px)
+}
+.save-slot-card{border-radius:9px;border-color:rgba(143,196,201,.14);background:rgba(255,255,255,.035)}
+.save-slot-actions button,.save-new-exploration{border-radius:7px}
+.toast{border:1px solid rgba(120,217,208,.25);border-radius:9px;background:rgba(8,20,29,.95);box-shadow:0 12px 35px rgba(0,0,0,.35)}
+button,input{font-family:"DM Sans",sans-serif}
+button:focus-visible,input:focus-visible{outline:2px solid #8fe2d9;outline-offset:3px}
+@media(max-width:900px) and (min-width:641px){
+ .panel{width:330px}.panel-content{padding:21px 18px}.maplibregl-ctrl-bottom-left{left:350px}
+ .game-hud{width:340px}
+}
+@media(max-width:640px){
+ .panel{inset:8px 8px auto;width:auto;max-height:min(68vh,590px);border-radius:15px}
+ .panel-top{min-height:60px;padding:0 15px}
+ .brand-mark{width:35px;height:35px;border-radius:10px;font-size:20px}
+ .panel-content{padding:15px 15px 17px}
+ h1{font-size:32px;margin:8px 0}
+ .intro-copy{font-size:11px;margin-bottom:15px}
+ .section-heading{margin:17px 0 9px}
+ .quick-places button{padding:9px 10px}
+ .view-button{min-height:55px}
+ .panel-footer{padding:0 15px}
+ .maplibregl-ctrl-bottom-left{left:8px;bottom:45px}
+ .maplibregl-ctrl-bottom-right{right:8px;bottom:42px}
+ .game-hud{top:8px;right:8px;width:min(360px,calc(100vw - 16px));max-height:calc(100dvh - 16px);padding:11px;border-radius:13px}
+ .game-hud-stats{gap:5px}
+ .game-hud-stats small{font-size:6px}
+ .game-hud-stats span{font-size:7px}
+ .game-hud-stats strong{font-size:9px}
+ .player-progress-panel,.daily-missions-panel{padding:9px}
+ .game-mode .map-hint{left:8px;bottom:8px}
+}
+@media(prefers-reduced-motion:no-preference){
+ .panel,.game-hud,.place-card{animation:juju-ui-in .28s ease-out both}
+ .quick-places button,.view-button,.game-hud-actions button{transition:transform .18s ease,border-color .18s ease,background .18s ease}
+}
+@keyframes juju-ui-in{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
