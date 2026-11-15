@@ -16,7 +16,6 @@ import {
 } from "../src/game/movement.ts";
 import { classifyBuilding, createInteriorLayout } from "../src/game/interiors.ts";
 import { applyDailyMissionProgress, createDailyMissionState, emptyProgress, normalizeProgress, recordDiscoveredCity, recordDiscoveredZone, recordTravelDistance } from "../src/game/progression.ts";
-s.replace;
 
 test("zone centres map back to their own zone at the equator and higher latitudes", () => {
   for (const latitude of [0, 35, 60, 80, -35, -60, -80]) {
