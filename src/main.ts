@@ -24,6 +24,9 @@ const translations = {
     streamingBalanced: "BALANCED",
     streamingPerformance: "PERFORMANCE",
     streamingOffline: "OFFLINE",
+    exploredZones: "VISITED",
+    clearExplored: "CLEAR VISITED ZONES",
+    exploredCleared: "Local exploration history cleared.",
     moveHelp: "WASD / ARROWS TO MOVE",
     playerReady: "PLAYER READY",
     globe: "3D GLOBE",
@@ -130,6 +133,9 @@ const translations = {
     streamingBalanced: "ÉQUILIBRÉ",
     streamingPerformance: "PERFORMANCES",
     streamingOffline: "HORS LIGNE",
+    exploredZones: "VISITÉES",
+    clearExplored: "EFFACER LES ZONES VISITÉES",
+    exploredCleared: "Historique local des explorations effacé.",
     moveHelp: "ZQSD / FLÈCHES POUR BOUGER",
     playerReady: "JOUEUR PRÊT",
     globe: "GLOBE 3D",
@@ -283,6 +289,75 @@ let vectorTileTemplatesPromise: Promise<string[]> | null = null;
 const prefetchedVectorTiles = new Set<string>();
 const pendingVectorTiles = new Set<string>();
 const zoneObstacleCache = new Map<string, GeoJSON.FeatureCollection<GeoJSON.Point>>();
+const EXPLORED_STORAGE_KEY = "juju-world-explored-zones-v1";
+const EXPLORED_ZONE_LIMIT = 200;
+interface ExploredZone { x: number; y: number; visitedAt: number }
+const exploredZones = new Map<string, ExploredZone>();
+function loadExploredZones(): void {
+  try {
+    const raw = localStorage.getItem(EXPLORED_STORAGE_KEY);
+    if (!raw) return;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    for (const item of parsed) {
+      if (!item || !Number.isInteger(item.x) || !Number.isInteger(item.y)
+        || !Number.isFinite(item.visitedAt)) continue;
+      const zone: ExploredZone = { x: item.x, y: item.y, visitedAt: item.visitedAt };
+      exploredZones.set(`${zone.x}:${zone.y}`, zone);
+    }
+    while (exploredZones.size > EXPLORED_ZONE_LIMIT) {
+      const oldest = exploredZones.keys().next().value;
+      if (oldest === undefined) break;
+      exploredZones.delete(oldest);
+    }
+  } catch (error) {
+    console.warn("Could not read local exploration history:", error);
+  }
+}
+function saveExploredZones(): void {
+  try {
+    localStorage.setItem(EXPLORED_STORAGE_KEY, JSON.stringify([...exploredZones.values()]));
+  } catch (error) {
+    console.warn("Could not save local exploration history:", error);
+    showToast(language === "en"
+      ? "Local save is unavailable. Check browser storage settings."
+      : "Sauvegarde locale indisponible. Vérifiez le stockage du navigateur.");
+  }
+}
+function updateExploredZonesLayer(): void {
+  const source = map.getSource("juju-visited-zones") as maplibregl.GeoJSONSource | undefined;
+  if (!source) return;
+  const features = [...exploredZones.values()].map((zone) => ({
+    ...zonePolygon(zone.x, zone.y),
+    properties: { visitedAt: zone.visitedAt },
+  }));
+  source.setData({ type: "FeatureCollection", features });
+  const count = document.querySelector<HTMLElement>("#game-explored-count");
+  if (count) count.textContent = String(exploredZones.size);
+}
+function recordExploredZone(zoneX: number, zoneY: number): void {
+  const key = `${zoneX}:${zoneY}`;
+  if (exploredZones.has(key)) exploredZones.delete(key);
+  exploredZones.set(key, { x: zoneX, y: zoneY, visitedAt: Date.now() });
+  while (exploredZones.size > EXPLORED_ZONE_LIMIT) {
+    const oldest = exploredZones.keys().next().value;
+    if (oldest === undefined) break;
+    exploredZones.delete(oldest);
+  }
+  saveExploredZones();
+  updateExploredZonesLayer();
+}
+function clearExploredZones(): void {
+  exploredZones.clear();
+  try {
+    localStorage.removeItem(EXPLORED_STORAGE_KEY);
+  } catch (error) {
+    console.warn("Could not clear local exploration history:", error);
+  }
+  updateExploredZonesLayer();
+  showToast(translations[language].exploredCleared);
+}
+loadExploredZones();
 
 const map: MapLibreMap = new maplibregl.Map({
   container: "map",
@@ -905,12 +980,30 @@ function ensureGameLayers(): void {
       paint: { "line-color": "#e4b77f", "line-width": 2, "line-dasharray": [3, 2], "line-opacity": 0.9 },
     });
   }
+  if (!map.getSource("juju-visited-zones")) {
+    map.addSource("juju-visited-zones", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    map.addLayer({
+      id: "juju-visited-zone-outlines",
+      type: "line",
+      source: "juju-visited-zones",
+      paint: {
+        "line-color": "#78d6b0",
+        "line-width": 1.5,
+        "line-opacity": 0.72,
+        "line-dasharray": [2, 2],
+      },
+    });
+  }
+  updateExploredZonesLayer();
 }
 
 function setGameWorldVisibility(visible: boolean): void {
   const visibility = visible ? "visible" : "none";
   [
-    "juju-zone-fill", "juju-zone-outline", "juju-zone-rocks",
+    "juju-zone-fill", "juju-zone-outline", "juju-visited-zone-outlines", "juju-zone-rocks",
     "juju-zone-trees", "juju-zone-spawn-marker", "juju-game-greenery",
     "juju-game-buildings", "juju-game-roads-casing", "juju-game-roads",
   ].forEach((id) => {
@@ -922,6 +1015,7 @@ function updateGameZone(lng: number, lat: number): void {
   const zone = zoneFor(lng, lat);
   if (zone.key === activeZoneKey) return;
   activeZoneKey = zone.key;
+  recordExploredZone(zone.x, zone.y);
   protectedZoneKeys = new Set<string>();
   for (let x = -1; x <= 1; x += 1) {
     for (let y = -1; y <= 1; y += 1) protectedZoneKeys.add(`${zone.x + x}:${zone.y + y}`);
@@ -1515,6 +1609,8 @@ speedControl.addEventListener("input", () => {
   movementSpeed = Number(speedControl.value);
   speedValue.textContent = String(movementSpeed);
 });
+
+$("#game-clear-explored").addEventListener("click", clearExploredZones);
 
 $("#globe-view").addEventListener("click", () => setMapView("globe"));
 
