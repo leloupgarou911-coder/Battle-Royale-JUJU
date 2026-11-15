@@ -1194,8 +1194,6 @@ function disableTerrain(): void {
 }
 
 function trimZoneObstacleCache(): void {
-
-function trimZoneObstacleCache(): void {
   while (zoneObstacleCache.size > streamingProfile.zoneCacheLimit) {
     const oldestUnprotected = [...zoneObstacleCache.keys()].find((key) => !protectedZoneKeys.has(key));
     const oldestKey = oldestUnprotected ?? zoneObstacleCache.keys().next().value;
