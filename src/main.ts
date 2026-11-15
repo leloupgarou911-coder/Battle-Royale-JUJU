@@ -506,7 +506,6 @@ function renderSavedGameSlots(): void {
   empty.textContent = language === "fr" ? "Aucune sauvegarde pour le moment." : "No saved games yet.";
   empty.hidden = savedGameSlots.length > 0;
   list.append(empty);
-  panel.hidden = false;
 }
 function clearActiveSaveSlot(): void {
   activeSaveSlotId = null;
@@ -515,6 +514,8 @@ function clearActiveSaveSlot(): void {
 function showSessionResumePrompt(): void {
   loadSavedGameSlots();
   renderSavedGameSlots();
+  const panel = document.querySelector<HTMLElement>("#resume-session");
+  if (panel) panel.hidden = savedGameSlots.length === 0;
 }
 const EXPLORED_ZONE_LIMIT = 200;
 interface ExploredZone { x: number; y: number; visitedAt: number }
@@ -1586,6 +1587,8 @@ function startGameMode(resumeSession: SavedGameSession | null = null): void {
   lastSessionSaveAt = 0;
   saveGameSession();
   renderSavedGameSlots();
+  const savePanel = document.querySelector<HTMLElement>("#resume-session");
+  if (savePanel) savePanel.hidden = true;
   showToast(resumeSession
     ? (language === "en" ? "Previous session restored." : "Session précédente restaurée.")
     : (language === "en" ? "Game mode enabled. Move with WASD or arrow keys." : "Mode jeu activé. Déplacez-vous avec ZQSD ou les flèches."));
