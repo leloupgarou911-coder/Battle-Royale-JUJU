@@ -40,7 +40,7 @@
       </section>
       <section id="home-dialog" class="home-dialog-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="home-dialog-title">
         <div class="home-dialog">
-          <button id="home-dialog-close" class="home-dialog-close" type="button" aria-label="Close">×</button>
+          <button id="home-dialog-close" class="home-dialog-close" type="button" data-i18n-aria="closeDialogAria" aria-label="Close">×</button>
           <p class="home-kicker"><span></span> JUJU WORLD</p>
           <h2 id="home-dialog-title">PARAMÈTRES</h2>
           <div id="home-dialog-content"></div>
@@ -63,7 +63,7 @@
 
           <form id="search-form" class="search-box">
             <span class="search-icon" aria-hidden="true">⌕</span>
-            <input id="place-search" type="search" autocomplete="off" placeholder="Search a city or a place..." aria-label="Search a city or a place" />
+            <input id="place-search" type="search" autocomplete="off" placeholder="Search a city or a place..." data-i18n-aria="searchAriaLabel" aria-label="Search a city or a place" />
             <button type="submit" aria-label="Search">↵</button>
           </form>
           <div id="search-results" class="search-results" aria-live="polite"></div>
@@ -116,7 +116,7 @@
       <section id="place-card" class="place-card" aria-live="polite" hidden>
         <div class="place-card-top">
           <span class="place-card-label" data-i18n="selectedLocation">SELECTED LOCATION</span>
-          <button id="place-card-close" class="place-card-close" type="button" aria-label="Close location details">×</button>
+          <button id="place-card-close" class="place-card-close" type="button" data-i18n-aria="closePlaceAria" aria-label="Close location details">×</button>
         </div>
         <h2 id="place-card-name"></h2>
         <p id="place-card-detail" class="place-card-detail"></p>
@@ -130,20 +130,20 @@
 
       <section id="building-interior" class="interior-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="interior-title">
         <div class="interior-panel">
-          <div class="interior-kicker">JUJU WORLD · EXPLORATION</div>
-          <h2 id="interior-title">Explorable interior</h2>
+          <div class="interior-kicker" data-i18n="interiorKicker">JUJU WORLD · EXPLORATION</div>
+          <h2 id="interior-title" data-i18n="interiorTitle">Explorable interior</h2>
           <p id="interior-building-name" class="interior-building-name"></p>
           <p id="interior-note" class="interior-note"></p>
           <div class="interior-map-metadata"><span id="interior-data-source"></span><span id="interior-levels"></span></div>
-          <p id="interior-controls" class="interior-controls">MOVE: WASD / ARROWS · INTERACT: E</p>
-          <div id="interior-room-status" class="interior-room-status">Entrance hall</div>
-          <div id="interior-board" class="interior-board" role="application" aria-label="Interactive fictional 2D building interior"></div>
-          <p id="interior-message" class="interior-message" aria-live="polite">Press E near furniture to inspect it.</p>
-          <button id="interior-exit" class="interior-exit" type="button">LEAVE BUILDING</button>
+          <p id="interior-controls" class="interior-controls" data-i18n="interiorMove">MOVE: WASD / ARROWS · INTERACT: E</p>
+          <div id="interior-room-status" class="interior-room-status" data-i18n="interiorHallName">Entrance hall</div>
+          <div id="interior-board" class="interior-board" role="application" data-i18n-aria="interiorBoardAriaLabel" aria-label="Interactive fictional 2D building interior"></div>
+          <p id="interior-message" class="interior-message" data-i18n="interiorInteract" aria-live="polite">Press E near furniture to inspect it.</p>
+          <button id="interior-exit" class="interior-exit" type="button" data-i18n="closeInterior" data-i18n-aria="closeInteriorAria">LEAVE BUILDING</button>
         </div>
       </section>
 
-      <section id="resume-session" class="resume-session" hidden aria-label="Saved game sessions">
+      <section id="resume-session" class="resume-session" hidden data-i18n-aria="saveSlotsTitle" aria-label="Saved game sessions">
         <strong data-i18n="saveSlotsTitle">SAVED EXPLORATIONS</strong>
         <p data-i18n="saveSlotsDescription">Choose a save to continue or create a new one.</p>
         <div class="save-slot-create">
@@ -151,11 +151,11 @@
           <button id="save-slot-create" type="button" data-i18n="saveSlotCreate">SAVE CURRENT</button>
         </div>
         <div id="save-slots-list" class="save-slots-list"></div>
-        <button id="save-slots-back" class="save-slots-back" type="button">← MENU PRINCIPAL</button>
+        <button id="save-slots-back" class="save-slots-back" type="button">← <span data-i18n="mainMenuLabel">MAIN MENU</span></button>
         <button id="resume-session-new" class="save-new-exploration" type="button" data-i18n="resumeNew">NEW EXPLORATION</button>
       </section>
-      <section class="game-hud" aria-label="Game controls">
-        <div class="player-progress-panel" aria-label="Player progression">
+      <section class="game-hud" data-i18n-aria="gameHudAriaLabel" aria-label="Game controls">
+        <div class="player-progress-panel" data-i18n-aria="progressAriaLabel" aria-label="Player progression">
           <div class="progress-heading"><strong data-i18n="progressTitle">PLAYER PROGRESSION</strong><span><span data-i18n="progressLevel">LEVEL</span> <b id="progress-level">1</b></span></div>
           <div class="progress-xp-label"><span id="progress-xp">0 / 100 XP · 0 total</span><span data-i18n="progressNext">NEXT LEVEL</span></div>
           <div class="progress-xp-track"><span id="progress-xp-bar"></span></div>
@@ -166,16 +166,16 @@
             <div><small data-i18n="progressAchievements">ACHIEVEMENTS</small><strong id="progress-achievements">0 / 7</strong></div>
           </div>
           <div class="progress-rewards-heading" data-i18n="progressRewards">UNLOCKED REWARDS</div>
-          <div id="progress-rewards" class="progress-rewards"><span>No achievements yet</span></div>
+          <div id="progress-rewards" class="progress-rewards"><span data-i18n="emptyRewards">No achievements yet</span></div>
         </div>
-        <section class="daily-missions-panel" aria-label="Daily missions">
-          <div class="daily-missions-heading"><strong>MISSIONS QUOTIDIENNES</strong><span>RENOUVELÉES CHAQUE JOUR</span></div>
+        <section class="daily-missions-panel" data-i18n-aria="dailyMissionsAriaLabel" aria-label="Daily missions">
+          <div class="daily-missions-heading"><strong data-i18n="dailyMissionsTitle">DAILY MISSIONS</strong><span data-i18n="dailyMissionsRenew">RENEWED EVERY DAY</span></div>
           <div id="daily-missions-list" class="daily-missions-list"></div>
-          <div class="mission-history-heading">HISTORIQUE DES MISSIONS</div>
+          <div class="mission-history-heading" data-i18n="missionHistoryTitle">MISSION HISTORY</div>
           <div id="mission-history" class="mission-history"></div>
         </section>
-        <div class="game-hud-top"><span class="game-hud-brand">JUJU <b>GAME MODE</b></span><span id="game-player-status">PLAYER READY</span></div>
-        <section class="game-mini-map-panel" aria-label="Navigation mini-map">
+        <div class="game-hud-top"><span class="game-hud-brand">JUJU <b data-i18n="gameModeLabel">GAME MODE</b></span><span id="game-player-status">PLAYER READY</span></div>
+        <section class="game-mini-map-panel" data-i18n-aria="miniMapAriaLabel" aria-label="Navigation mini-map">
           <div class="mini-map-heading"><strong data-i18n="miniMapTitle">MINI-MAP</strong><span data-i18n="miniMapPlayer">YOU</span></div>
           <div class="mini-map-frame">
             <div id="game-mini-map" aria-hidden="true"></div>
@@ -183,16 +183,16 @@
           </div>
           <div id="mini-map-coordinates" class="mini-map-coordinates">0.000, 0.000</div>
         </section>
-        <div class="game-hud-stats"><div><small>ACTIVE ZONE</small><strong id="game-zone-status">ZONE READY</strong><span id="game-zone-coordinates">0.000, 0.000</span></div><div><small>PLAYER</small><strong>TOP-DOWN</strong><span data-i18n="moveHelp">WASD / ARROWS TO MOVE</span></div><div><small data-i18n="streamingLabel">STREAMING</small><strong id="game-streaming-status">BALANCED</strong><span id="game-streaming-detail">Cache 49 · Ahead 2</span></div><div><small data-i18n="exploredZones">VISITED</small><strong id="game-explored-count">0</strong><span>LOCAL</span></div></div>
+        <div class="game-hud-stats"><div><small data-i18n="activeZoneLabel">ACTIVE ZONE</small><strong id="game-zone-status">ZONE READY</strong><span id="game-zone-coordinates">0.000, 0.000</span></div><div><small data-i18n="playerLabel">PLAYER</small><strong data-i18n="topDownLabel">TOP-DOWN</strong><span data-i18n="moveHelp">WASD / ARROWS TO MOVE</span></div><div><small data-i18n="streamingLabel">STREAMING</small><strong id="game-streaming-status">BALANCED</strong><span id="game-streaming-detail">Cache 49 · Ahead 2</span></div><div><small data-i18n="exploredZones">VISITED</small><strong id="game-explored-count">0</strong><span data-i18n="localLabel">LOCAL</span></div></div>
         <div class="game-speed-control">
           <label for="game-speed"><span data-i18n="movementSpeedLabel">MOVEMENT SPEED (m/s)</span> <strong id="game-speed-value">4.5</strong></label>
           <input id="game-speed" type="range" min="1" max="12" step="0.5" value="4.5" />
         </div>
-        <div class="game-touch-controls" aria-label="Touch movement controls">
-          <button type="button" data-move="up" aria-label="Move up">▲</button>
-          <div><button type="button" data-move="left" aria-label="Move left">◀</button><button type="button" data-move="down" aria-label="Move down">▼</button><button type="button" data-move="right" aria-label="Move right">▶</button></div>
+        <div class="game-touch-controls" data-i18n-aria="gameTouchAriaLabel" aria-label="Touch movement controls">
+          <button type="button" data-move="up" data-i18n-aria="moveUpAria" aria-label="Move up">▲</button>
+          <div><button type="button" data-move="left" data-i18n-aria="moveLeftAria" aria-label="Move left">◀</button><button type="button" data-move="down" data-i18n-aria="moveDownAria" aria-label="Move down">▼</button><button type="button" data-move="right" data-i18n-aria="moveRightAria" aria-label="Move right">▶</button></div>
         </div>
-        <div class="game-hud-actions"><button id="game-main-menu" type="button">MAIN MENU</button><button id="game-zone-reload" type="button" data-i18n="loadZone">RELOAD CURRENT ZONE</button><button id="game-mode-toggle" type="button" data-i18n="enterGame">ENTER GAME MODE</button></div>
+        <div class="game-hud-actions"><button id="game-main-menu" type="button" data-i18n="mainMenuLabel">MAIN MENU</button><button id="game-zone-reload" type="button" data-i18n="loadZone">RELOAD CURRENT ZONE</button><button id="game-mode-toggle" type="button" data-i18n="enterGame">ENTER GAME MODE</button></div>
         <button id="game-clear-explored" class="game-clear-explored" type="button" data-i18n="clearExplored">CLEAR VISITED ZONES</button>
       </section>
       <div class="map-hint"><span class="hint-icon">⌖</span><span data-i18n="hint">Drag to move · Scroll to zoom · Right-click to tilt</span></div>
