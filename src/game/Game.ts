@@ -129,8 +129,8 @@ export class Game {
         if (!outer || outer.length < 4) continue;
         const points = outer.map(([lng, lat]) => this.geographicToLocal(lng, lat));
         const shape = new THREE.Shape();
-        shape.moveTo(points[0][0], points[0][1]);
-        for (let i = 1; i < points.length; i += 1) shape.lineTo(points[i][0], points[i][1]);
+        shape.moveTo(points[0][0], -points[0][1]);
+        for (let i = 1; i < points.length; i += 1) shape.lineTo(points[i][0], -points[i][1]);
         shape.closePath();
         const meshGeometry = new THREE.ExtrudeGeometry(shape, { depth: height - base, bevelEnabled: false, curveSegments: 1 });
         meshGeometry.rotateX(-Math.PI / 2);
