@@ -739,6 +739,7 @@ function stopGameMode(): void {
   gameMode = false;
   stopMovementLoop();
   setGameWorldVisibility(false);
+  closeBuildingInterior();
   playerMarker?.remove();
   playerMarker = null;
   $("#app").classList.remove("game-mode");
@@ -1027,6 +1028,25 @@ map.on("click", (event) => {
       return;
     }
 
+    const greenArea = map.getLayer("juju-game-greenery")
+      ? map.queryRenderedFeatures(event.point, { layers: ["juju-game-greenery"] })[0]
+      : undefined;
+    if (greenArea) {
+      const landClass = String(greenArea.properties?.class ?? "green space");
+      const content = document.createElement("div");
+      content.className = "poi-popup";
+      const title = document.createElement("strong");
+      title.textContent = translations[language].natureTitle;
+      const detail = document.createElement("span");
+      detail.textContent = landClass;
+      const source = document.createElement("small");
+      source.textContent = language === "en" ? "Mapped land cover · OpenStreetMap data" : "Occupation du sol cartographiée · Données OpenStreetMap";
+      content.append(title, detail, source);
+      new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "250px" })
+        .setLngLat(event.lngLat).setDOMContent(content).addTo(map);
+      return;
+    }
+
     const obstacleLayers = ["juju-zone-trees", "juju-zone-rocks"].filter((id) => map.getLayer(id));
     const obstacle = obstacleLayers.length
       ? map.queryRenderedFeatures(event.point, { layers: obstacleLayers })[0]
@@ -1069,7 +1089,7 @@ map.on("click", (event) => {
 
 map.on("mousemove", (event) => {
   if (gameMode) {
-    const gameLayers = ["juju-game-buildings", "juju-zone-trees", "juju-zone-rocks"].filter((id) => map.getLayer(id));
+    const gameLayers = ["juju-game-buildings", "juju-game-greenery", "juju-zone-trees", "juju-zone-rocks"].filter((id) => map.getLayer(id));
     const overGameObject = gameLayers.length && map.queryRenderedFeatures(event.point, { layers: gameLayers }).length > 0;
     map.getCanvas().style.cursor = overGameObject ? "pointer" : "";
     return;
