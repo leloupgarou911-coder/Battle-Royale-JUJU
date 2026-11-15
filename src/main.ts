@@ -1638,9 +1638,11 @@ function updateGameHud(): void {
 function isBuildingCollision(lng: number, lat: number): boolean {
   const point = map.project([lng, lat]);
   if (map.getLayer("juju-collision-buildings") && map.getZoom() >= 15) {
-    const radius = 7;
+    const radius = 12;
     const samples: [number, number][] = [
       [0, 0], [radius, 0], [-radius, 0], [0, radius], [0, -radius],
+      [radius * 0.7, radius * 0.7], [-radius * 0.7, radius * 0.7],
+      [radius * 0.7, -radius * 0.7], [-radius * 0.7, -radius * 0.7],
     ];
     const buildingHit = samples.some(([dx, dy]) => map.queryRenderedFeatures(
       [point.x + dx, point.y + dy],
