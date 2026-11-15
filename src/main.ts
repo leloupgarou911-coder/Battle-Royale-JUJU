@@ -516,7 +516,14 @@ function updateGameZone(lng: number, lat: number): void {
   const source = map.getSource("juju-active-zone") as maplibregl.GeoJSONSource | undefined;
   source?.setData(zonePolygon(zone.x, zone.y));
   const obstacles = map.getSource("juju-zone-obstacles") as maplibregl.GeoJSONSource | undefined;
-  obstacles?.setData(createZoneObstacles(zone.x, zone.y));
+  // Stream decorative props for the active zone and its eight neighbours.
+  const nearbyFeatures: GeoJSON.Feature<GeoJSON.Point>[] = [];
+  for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+    for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+      nearbyFeatures.push(...createZoneObstacles(zone.x + offsetX, zone.y + offsetY).features);
+    }
+  }
+  obstacles?.setData({ type: "FeatureCollection", features: nearbyFeatures });
   const spawnSource = map.getSource("juju-zone-spawn") as maplibregl.GeoJSONSource | undefined;
   const spawnPoint = spawnForZone(zone.x, zone.y);
   spawnSource?.setData({
@@ -562,6 +569,7 @@ function isBuildingCollision(lng: number, lat: number): boolean {
 
 function startGameMode(): void {
   gameMode = true;
+  heldDirections.clear();
   disableTerrain();
   map.setProjection({ type: "mercator" });
   map.setPitch(0);
@@ -577,6 +585,7 @@ function startGameMode(): void {
   updateGameZone(spawn.lng, spawn.lat);
   const player = document.createElement("div");
   player.className = "juju-player";
+  player.dataset.direction = "down";
   player.setAttribute("role", "img");
   player.setAttribute("aria-label", "Player");
   playerMarker?.remove();
@@ -598,6 +607,7 @@ function startGameMode(): void {
 
 function stopGameMode(): void {
   gameMode = false;
+  stopMovementLoop();
   setGameWorldVisibility(false);
   playerMarker?.remove();
   playerMarker = null;
@@ -606,23 +616,86 @@ function stopGameMode(): void {
   map.easeTo({ pitch: 0, bearing: 0, duration: 400 });
 }
 
-function movePlayer(dx: number, dy: number): void {
-  if (!gameMode || !playerMarker) return;
-  const center = map.getCenter();
-  const point = map.project(center);
-  const next = map.unproject([point.x + dx, point.y + dy]);
-  if (isBuildingCollision(next.lng, next.lat)) {
-    $("#game-player-status").textContent = language === "en" ? "BLOCKED" : "BLOQUÉ";
+const heldDirections = new Set<string>();
+let movementFrame = 0;
+let previousMovementTime = 0;
+let movementSpeed = 180;
+
+const directionKeys: Record<string, { x: number; y: number; direction: string }> = {
+  arrowup: { x: 0, y: -1, direction: "up" }, w: { x: 0, y: -1, direction: "up" }, z: { x: 0, y: -1, direction: "up" },
+  arrowdown: { x: 0, y: 1, direction: "down" }, s: { x: 0, y: 1, direction: "down" },
+  arrowleft: { x: -1, y: 0, direction: "left" }, a: { x: -1, y: 0, direction: "left" }, q: { x: -1, y: 0, direction: "left" },
+  arrowright: { x: 1, y: 0, direction: "right" }, d: { x: 1, y: 0, direction: "right" },
+};
+
+function stopMovementLoop(): void {
+  if (movementFrame) window.cancelAnimationFrame(movementFrame);
+  movementFrame = 0;
+  previousMovementTime = 0;
+  heldDirections.clear();
+  playerMarker?.getElement().classList.remove("is-moving");
+}
+
+function movementTick(time: number): void {
+  movementFrame = 0;
+  if (!gameMode || !playerMarker || heldDirections.size === 0) {
+    previousMovementTime = 0;
+    playerMarker?.getElement().classList.remove("is-moving");
     return;
   }
-  $("#game-player-status").textContent = translations[language].playerReady;
-  const playerElement = playerMarker.getElement();
-  playerElement.classList.add("is-moving");
-  playerMarker.setLngLat(next);
-  // Keep the character near screen center while the world glides underneath.
-  map.easeTo({ center: next, duration: 150, easing: (t) => t });
-  window.setTimeout(() => playerElement.classList.remove("is-moving"), 170);
-  updateGameHud();
+  const delta = previousMovementTime ? Math.min((time - previousMovementTime) / 1000, 0.05) : 0;
+  previousMovementTime = time;
+  let dx = 0;
+  let dy = 0;
+  for (const key of heldDirections) {
+    const direction = directionKeys[key];
+    if (direction) { dx += direction.x; dy += direction.y; }
+  }
+  const length = Math.hypot(dx, dy);
+  if (length > 0 && delta > 0) {
+    dx = (dx / length) * movementSpeed * delta;
+    dy = (dy / length) * movementSpeed * delta;
+    const center = map.getCenter();
+    const point = map.project(center);
+    const next = map.unproject([point.x + dx, point.y + dy]);
+    if (isBuildingCollision(next.lng, next.lat)) {
+      $("#game-player-status").textContent = language === "en" ? "BLOCKED" : "BLOQUÉ";
+      heldDirections.clear();
+      playerMarker.getElement().classList.remove("is-moving");
+      previousMovementTime = 0;
+      return;
+    }
+    const activeDirection = [...heldDirections].map((key) => directionKeys[key]).filter(Boolean).at(-1);
+    const playerElement = playerMarker.getElement();
+    if (activeDirection) playerElement.dataset.direction = activeDirection.direction;
+    playerElement.classList.add("is-moving");
+    $("#game-player-status").textContent = translations[language].playerReady;
+    playerMarker.setLngLat(next);
+    map.jumpTo({ center: next });
+    updateGameHud();
+  }
+  movementFrame = window.requestAnimationFrame(movementTick);
+}
+
+function startMovementLoop(): void {
+  if (!movementFrame && gameMode && heldDirections.size) {
+    previousMovementTime = 0;
+    movementFrame = window.requestAnimationFrame(movementTick);
+  }
+}
+
+function setMovementKey(key: string, pressed: boolean): void {
+  const normalized = key.toLowerCase();
+  if (!directionKeys[normalized] || !gameMode) return;
+  if (pressed) heldDirections.add(normalized);
+  else heldDirections.delete(normalized);
+  if (pressed) startMovementLoop();
+  if (!heldDirections.size) {
+    if (movementFrame) window.cancelAnimationFrame(movementFrame);
+    movementFrame = 0;
+    previousMovementTime = 0;
+    playerMarker?.getElement().classList.remove("is-moving");
+  }
 }
 
 function setGameCamera(): void {
@@ -711,30 +784,36 @@ $("#game-zone-reload").addEventListener("click", () => {
   showToast(language === "en" ? "Visible map zone refreshed." : "Zone cartographique visible actualisée.");
 });
 window.addEventListener("keydown", (event) => {
-  if (!gameMode || event.repeat && !["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "a", "s", "d", "z", "q"].includes(event.key)) return;
   const target = event.target as HTMLElement | null;
   if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
-  const key = event.key.toLowerCase();
-  const step = 9;
-  const directions: Record<string, [number, number]> = {
-    arrowup: [0, -step], w: [0, -step], z: [0, -step],
-    arrowdown: [0, step], s: [0, step],
-    arrowleft: [-step, 0], a: [-step, 0], q: [-step, 0],
-    arrowright: [step, 0], d: [step, 0],
-  };
-  const direction = directions[key];
-  if (!direction) return;
+  if (!directionKeys[event.key.toLowerCase()] || !gameMode) return;
   event.preventDefault();
-  movePlayer(direction[0], direction[1]);
+  setMovementKey(event.key, true);
+});
+window.addEventListener("keyup", (event) => setMovementKey(event.key, false));
+window.addEventListener("blur", stopMovementLoop);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) stopMovementLoop();
 });
 document.querySelectorAll<HTMLButtonElement>("[data-move]").forEach((button) => {
-  button.addEventListener("click", () => {
-    const directions: Record<string, [number, number]> = {
-      up: [0, -9], down: [0, 9], left: [-9, 0], right: [9, 0],
-    };
-    const direction = directions[button.dataset.move ?? ""];
-    if (direction) movePlayer(direction[0], direction[1]);
+  const keyByDirection: Record<string, string> = { up: "arrowup", down: "arrowdown", left: "arrowleft", right: "arrowright" };
+  const key = keyByDirection[button.dataset.move ?? ""];
+  if (!key) return;
+  button.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    button.setPointerCapture(event.pointerId);
+    setMovementKey(key, true);
   });
+  const release = () => setMovementKey(key, false);
+  button.addEventListener("pointerup", release);
+  button.addEventListener("pointercancel", release);
+  button.addEventListener("lostpointercapture", release);
+});
+const speedControl = $("#game-speed") as HTMLInputElement;
+const speedValue = $("#game-speed-value");
+speedControl.addEventListener("input", () => {
+  movementSpeed = Number(speedControl.value);
+  speedValue.textContent = String(movementSpeed);
 });
 
 $("#globe-view").addEventListener("click", () => setMapView("globe"));
