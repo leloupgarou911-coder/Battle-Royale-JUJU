@@ -1,6 +1,8 @@
 import * as THREE from "three";
 
-type PositionCallback = (x: number, z: number) => void;
+type PositionCallback = (x: number, z: number, lng: number, lat: number) => void;
+type MappedBuildingFeature = GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>;
+interface GameWorldData { origin: [number, number]; buildings: MappedBuildingFeature[]; }
 
 export class Game {
   private readonly scene = new THREE.Scene();
@@ -13,6 +15,9 @@ export class Game {
   private readonly forward = new THREE.Vector3();
   private readonly right = new THREE.Vector3();
   private readonly onPosition: PositionCallback;
+  private readonly worldData: GameWorldData;
+  private readonly metersPerLongitude: number;
+  private readonly metersPerLatitude = 111_320;
   private animationFrame = 0;
   private isRunning = false;
   private pointerLocked = false;
@@ -22,8 +27,11 @@ export class Game {
   constructor(
     private readonly container: HTMLElement,
     onPosition: PositionCallback,
+    worldData: GameWorldData,
   ) {
     this.onPosition = onPosition;
+    this.worldData = worldData;
+    this.metersPerLongitude = 111_320 * Math.cos(worldData.origin[1] * Math.PI / 180);
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
     this.renderer.shadowMap.enabled = true;
@@ -34,6 +42,7 @@ export class Game {
     this.container.appendChild(this.renderer.domElement);
 
     this.buildWorld();
+    this.buildMappedBuildings();
     this.buildPlayer();
     this.camera.position.set(0, 5, 9);
     this.resize();
@@ -77,13 +86,15 @@ export class Game {
     this.addRoad(0, -42, 190, 7, false);
     this.addRoad(0, 42, 190, 7, false);
 
-    const blockPositions = [-70, -28, 28, 70];
-    blockPositions.forEach((x, xi) => {
-      blockPositions.forEach((z, zi) => {
-        if ((xi + zi) % 5 === 0) return;
-        this.addBuilding(x, z, 12 + ((xi * 3 + zi * 5) % 17), 10 + ((xi + zi * 2) % 12));
+    if (this.worldData.buildings.length === 0) {
+      const blockPositions = [-70, -28, 28, 70];
+      blockPositions.forEach((x, xi) => {
+        blockPositions.forEach((z, zi) => {
+          if ((xi + zi) % 5 === 0) return;
+          this.addBuilding(x, z, 12 + ((xi * 3 + zi * 5) % 17), 10 + ((xi + zi * 2) % 12));
+        });
       });
-    });
+    }
 
     for (let i = 0; i < 34; i += 1) {
       const side = i % 2 === 0 ? -1 : 1;
@@ -99,6 +110,38 @@ export class Game {
     this.scene.add(grid);
   }
 
+  private geographicToLocal(lng: number, lat: number): [number, number] {
+    return [(lng - this.worldData.origin[0]) * this.metersPerLongitude, -(lat - this.worldData.origin[1]) * this.metersPerLatitude];
+  }
+
+  private buildMappedBuildings(): void {
+    const material = new THREE.MeshStandardMaterial({ color: 0xb7a995, roughness: 0.86 });
+    for (const feature of this.worldData.buildings) {
+      const geometry = feature.geometry;
+      const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+      const properties = feature.properties ?? {};
+      const rawHeight = Number(properties.render_height ?? properties.height ?? 8);
+      const rawBase = Number(properties.render_min_height ?? properties.min_height ?? 0);
+      const height = THREE.MathUtils.clamp(Number.isFinite(rawHeight) ? rawHeight : 8, 3, 120);
+      const base = THREE.MathUtils.clamp(Number.isFinite(rawBase) ? rawBase : 0, 0, height - 1);
+      for (const polygon of polygons) {
+        const outer = polygon[0];
+        if (!outer || outer.length < 4) continue;
+        const points = outer.map(([lng, lat]) => this.geographicToLocal(lng, lat));
+        const shape = new THREE.Shape();
+        shape.moveTo(points[0][0], points[0][1]);
+        for (let i = 1; i < points.length; i += 1) shape.lineTo(points[i][0], points[i][1]);
+        shape.closePath();
+        const meshGeometry = new THREE.ExtrudeGeometry(shape, { depth: height - base, bevelEnabled: false, curveSegments: 1 });
+        meshGeometry.rotateX(-Math.PI / 2);
+        const building = new THREE.Mesh(meshGeometry, material);
+        building.position.y = base;
+        building.castShadow = true;
+        building.receiveShadow = true;
+        this.scene.add(building);
+      }
+    }
+  }
   private addRoad(x: number, z: number, width: number, length: number, vertical: boolean): void {
     const road = new THREE.Mesh(
       new THREE.PlaneGeometry(vertical ? width : length, vertical ? length : width),
@@ -200,7 +243,9 @@ export class Game {
     this.updatePlayer(delta);
     this.updateCamera(delta);
     this.renderer.render(this.scene, this.camera);
-    this.onPosition(this.player.position.x, this.player.position.z);
+    const lng = this.worldData.origin[0] + this.player.position.x / this.metersPerLongitude;
+    const lat = this.worldData.origin[1] - this.player.position.z / this.metersPerLatitude;
+    this.onPosition(this.player.position.x, this.player.position.z, lng, lat);
   };
 
   private updatePlayer(delta: number): void {
