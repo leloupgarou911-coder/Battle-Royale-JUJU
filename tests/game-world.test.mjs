@@ -16,6 +16,7 @@ import {
 } from "../src/game/movement.ts";
 import { classifyBuilding, createInteriorLayout } from "../src/game/interiors.ts";
 import { applyDailyMissionProgress, createDailyMissionState, emptyProgress, normalizeProgress, recordDiscoveredCity, recordDiscoveredZone, recordTravelDistance } from "../src/game/progression.ts";
+import { detectStreamingProfile } from "../src/game/streaming.ts";
 
 test("zone centres map back to their own zone at the equator and higher latitudes", () => {
   for (const latitude of [0, 35, 60, 80, -35, -60, -80]) {
@@ -200,4 +201,16 @@ test("saved sessions reject invalid coordinates, corrupt settings and stale time
   assert.equal(isValidGameSession({ ...valid, zoom: 30 }, now), false);
   assert.equal(isValidGameSession({ ...valid, savedAt: now - SESSION_MAX_AGE_MS - 1 }, now), false);
   assert.equal(isValidGameSession({ ...valid, savedAt: now + 1 }, now), false);
+});
+
+test("adaptive streaming selects economy, balanced and performance budgets", () => {
+  assert.deepEqual(detectStreamingProfile({ online: false }), {
+    tier: "economy", tileCacheSize: 48, zoneCacheLimit: 25, prefetchDepth: 1,
+  });
+  assert.equal(detectStreamingProfile({ online: true, memory: 2, cores: 8 }).tier, "economy");
+  assert.equal(detectStreamingProfile({ online: true, connection: { effectiveType: "3g" } }).tier, "economy");
+  assert.equal(detectStreamingProfile({ online: true }).tier, "balanced");
+  assert.deepEqual(detectStreamingProfile({
+    online: true, memory: 8, cores: 8, connection: { downlink: 10 },
+  }), { tier: "performance", tileCacheSize: 256, zoneCacheLimit: 81, prefetchDepth: 3 });
 });
