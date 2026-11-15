@@ -21,10 +21,12 @@ test("home screen, French localization and settings render at this viewport", as
   await page.locator("#home-dialog-close").click();
   await expect(page.locator("#home-dialog")).toBeHidden();
 
-  await page.locator("#home-screen").evaluate((element) => { element.hidden = true; });
-  await page.locator("#app").evaluate((element) => { element.classList.add("game-mode"); });
+  await expect(page.locator("#map-status")).not.toContainText(/CONNECTING|CONNEXION/, { timeout: 30_000 });
+  await page.locator("#home-play").click();
+  await expect(page.locator("#home-screen")).toBeHidden({ timeout: 15_000 });
   await expect(page.locator(".game-hud")).toBeVisible();
   await expect(page.locator(".game-mini-map-panel")).toBeVisible();
+  await expect(page.locator("#game-mini-map .maplibregl-canvas")).toBeVisible({ timeout: 20_000 });
   await page.locator(".game-hud").screenshot({ path: testInfo.outputPath("game-hud.png"), animations: "disabled" });
 
   const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
