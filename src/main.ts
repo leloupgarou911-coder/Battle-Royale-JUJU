@@ -43,6 +43,8 @@ const translations = {
     poiCommerce: "Shops & services",
     poiCulture: "Culture & landmarks",
     poiHealth: "Health services",
+    poiCivic: "Public services",
+    poiSports: "Sports & recreation",
     poiLegend: "MAP LEGEND",
     poiZoomNote: "Visible when you zoom into a city (zoom 13+).",
     poiUnnamed: "Unnamed place",
@@ -141,6 +143,8 @@ const translations = {
     poiCommerce: "Commerces et services",
     poiCulture: "Culture et monuments",
     poiHealth: "Services de santé",
+    poiCivic: "Services publics",
+    poiSports: "Sports et loisirs",
     poiLegend: "LÉGENDE DE LA CARTE",
     poiZoomNote: "Visible en zoomant sur une ville (niveau 13+).",
     poiUnnamed: "Lieu sans nom",
@@ -224,7 +228,7 @@ let playerMarker: maplibregl.Marker | null = null;
 let virtualEntranceMarker: maplibregl.Marker | null = null;
 let selectedBuildingName = "";
 let selectedBuildingType: BuildingKind = "other";
-let selectedBuildingLevels = 1;
+let selectedBuildingLevels: number | null = null;
 let activeZoneKey = "";
 let interiorPosition = { x: 2, y: 4 };
 let interiorLastDirection = "down";
@@ -369,10 +373,12 @@ function addPointsOfInterest(): void {
       filter: [
         "all",
         ["in", ["get", "class"], ["literal", [
-          "park", "school", "college", "library", "bus", "railway",
-          "shop", "grocery", "cafe", "fast_food", "attraction",
-          "art_gallery", "castle", "town_hall", "stadium", "zoo",
-          "hospital", "post"
+          "park", "garden", "nature_reserve", "school", "college", "university", "kindergarten", "library",
+          "bus", "railway", "subway", "tram", "ferry", "airport",
+          "shop", "grocery", "supermarket", "clothes", "bakery", "cafe", "restaurant", "fast_food", "bank", "atm", "post",
+          "attraction", "art_gallery", "museum", "castle", "monument", "memorial", "town_hall", "courthouse", "zoo", "viewpoint",
+          "stadium", "sports_centre", "pitch", "playground", "swimming_pool",
+          "hospital", "clinic", "doctors", "pharmacy", "police", "fire_station", "government", "place_of_worship", "theatre", "cinema"
         ]]],
         ["!", ["in", ["get", "subclass"], ["literal", ["alcohol", "beverages", "wine", "tobacco", "weapons", "bookmaker", "lottery", "gambling"]]]],
       ],
@@ -406,10 +412,12 @@ function addPointsOfInterest(): void {
         "all",
         ["has", "name"],
         ["in", ["get", "class"], ["literal", [
-          "park", "school", "college", "library", "bus", "railway",
-          "shop", "grocery", "cafe", "fast_food", "attraction",
-          "art_gallery", "castle", "town_hall", "stadium", "zoo",
-          "hospital", "post"
+          "park", "garden", "nature_reserve", "school", "college", "university", "kindergarten", "library",
+          "bus", "railway", "subway", "tram", "ferry", "airport",
+          "shop", "grocery", "supermarket", "clothes", "bakery", "cafe", "restaurant", "fast_food", "bank", "atm", "post",
+          "attraction", "art_gallery", "museum", "castle", "monument", "memorial", "town_hall", "courthouse", "zoo", "viewpoint",
+          "stadium", "sports_centre", "pitch", "playground", "swimming_pool",
+          "hospital", "clinic", "doctors", "pharmacy", "police", "fire_station", "government", "place_of_worship", "theatre", "cinema"
         ]]],
         ["!", ["in", ["get", "subclass"], ["literal", ["alcohol", "beverages", "wine", "tobacco", "weapons", "bookmaker", "lottery", "gambling"]]]],
       ],
@@ -433,11 +441,13 @@ function addPointsOfInterest(): void {
 }
 
 function poiCategory(className: string): string {
-  if (className === "park") return translations[language].poiPark;
-  if (["school", "college", "library"].includes(className)) return translations[language].poiEducation;
-  if (["bus", "railway"].includes(className)) return translations[language].poiTransport;
-  if (["shop", "grocery", "cafe", "fast_food", "post"].includes(className)) return translations[language].poiCommerce;
-  if (className === "hospital") return translations[language].poiHealth;
+  if (["park", "garden", "nature_reserve"].includes(className)) return translations[language].poiPark;
+  if (["school", "college", "university", "kindergarten", "library"].includes(className)) return translations[language].poiEducation;
+  if (["bus", "railway", "subway", "tram", "ferry", "airport"].includes(className)) return translations[language].poiTransport;
+  if (["shop", "grocery", "supermarket", "clothes", "bakery", "cafe", "restaurant", "fast_food", "bank", "atm", "post"].includes(className)) return translations[language].poiCommerce;
+  if (["hospital", "clinic", "doctors", "pharmacy"].includes(className)) return translations[language].poiHealth;
+  if (["police", "fire_station", "government", "town_hall", "courthouse"].includes(className)) return translations[language].poiCivic;
+  if (["stadium", "sports_centre", "pitch", "playground", "swimming_pool"].includes(className)) return translations[language].poiSports;
   return translations[language].poiCulture;
 }
 
@@ -983,7 +993,9 @@ function openBuildingInterior(): void {
   $("#interior-title").textContent = `${buildingTypeLabel(selectedBuildingType)} · ${translations[language].interiorTitle}`;
   $("#interior-note").textContent = translations[language].interiorGeneratedNote;
   $("#interior-data-source").textContent = translations[language].interiorDataSource;
-  $("#interior-levels").textContent = `${selectedBuildingLevels} ${language === "fr" ? "niveau(x) cartographié(s)" : "mapped level(s)"}`;
+  $("#interior-levels").textContent = selectedBuildingLevels
+    ? `${selectedBuildingLevels} ${language === "fr" ? "niveau(x) indiqué(s) sur la carte" : "level(s) recorded in map data"}`
+    : (language === "fr" ? "Nombre de niveaux non renseigné" : "Number of levels not mapped");
   createInteriorForBuilding(selectedBuildingType);
   $("#interior-controls").textContent = translations[language].interiorMove;
   $("#interior-message").textContent = translations[language].interiorInteract;
@@ -1329,7 +1341,10 @@ map.on("click", (event) => {
     if (building) {
       const props = (building.properties ?? {}) as Record<string, unknown>;
       selectedBuildingType = classifyBuilding(props);
-      selectedBuildingLevels = Math.max(1, Math.min(20, Number(props.render_height ? Math.round(Number(props.render_height) / 3) : props.levels ?? props["building:levels"] ?? 1) || 1));
+      const mappedLevels = Number(props.levels ?? props["building:levels"]);
+      selectedBuildingLevels = Number.isFinite(mappedLevels) && mappedLevels > 0
+        ? Math.min(20, Math.round(mappedLevels))
+        : null;
       selectedBuildingName = String(props.name ?? props.name_en ?? buildingTypeLabel(selectedBuildingType));
       virtualEntranceMarker?.remove();
       const entrance = document.createElement("button");
