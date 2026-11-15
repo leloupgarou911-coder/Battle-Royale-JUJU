@@ -10,6 +10,43 @@
   <body>
     <main id="app">
       <div id="map" aria-label="Interactive world map"></div>
+      <section id="home-screen" class="home-screen" aria-label="JUJU WORLD main menu">
+        <div class="home-atmosphere" aria-hidden="true"><span class="home-orbit home-orbit-one"></span><span class="home-orbit home-orbit-two"></span><span class="home-grid"></span></div>
+        <div class="home-topbar">
+          <a class="home-brand" href="./" aria-label="JUJU WORLD"><span class="home-brand-mark">J</span><span><strong>JUJU <i>WORLD</i></strong><small>EXPLORE BEYOND THE MAP</small></span></a>
+          <div class="home-top-actions"><span class="home-alpha">PRE-ALPHA</span><button id="home-language" type="button">EN / FR</button></div>
+        </div>
+        <div class="home-content">
+          <div class="home-copy">
+            <p class="home-kicker"><span></span> THE WORLD IS WAITING</p>
+            <h1>YOUR WORLD.<br><em>YOUR ADVENTURE.</em></h1>
+            <p class="home-description">Explore real places, discover new cities and create your own journey across a living world map.</p>
+            <div class="home-actions">
+              <button id="home-play" class="home-play-button" type="button"><span>▶</span> JOUER <small>START EXPLORING</small></button>
+              <button id="home-saves" class="home-secondary-button" type="button"><span>▤</span> MES SAUVEGARDES</button>
+            </div>
+            <div class="home-menu-links">
+              <button id="home-settings" type="button"><span>⚙</span> PARAMÈTRES</button>
+              <button id="home-profile" type="button"><span>◉</span> PROFIL & PROGRESSION</button>
+            </div>
+          </div>
+          <div class="home-world-card">
+            <div class="home-world-label"><span class="home-live-pulse"></span> WORLD EXPLORER <b>01</b></div>
+            <div class="home-world-visual" aria-hidden="true"><div class="home-world-globe"><span></span></div><div class="home-world-scan"></div><div class="home-world-coord">31°37' N&nbsp; 08°00' E</div><div class="home-world-caption">ONE PLANET<br><strong>ENDLESS PLACES</strong></div></div>
+            <div class="home-world-footer"><span>GLOBAL MAP</span><span>OPEN WORLD EXPERIENCE</span></div>
+          </div>
+        </div>
+        <div class="home-bottom"><span>JUJU WORLD <b>·</b> ALPHA 0.2</span><span>BUILT FOR EXPLORATION</span></div>
+      </section>
+      <section id="home-dialog" class="home-dialog-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="home-dialog-title">
+        <div class="home-dialog">
+          <button id="home-dialog-close" class="home-dialog-close" type="button" aria-label="Close">×</button>
+          <p class="home-kicker"><span></span> JUJU WORLD</p>
+          <h2 id="home-dialog-title">PARAMÈTRES</h2>
+          <div id="home-dialog-content"></div>
+        </div>
+      </section>
+
       <aside class="panel" aria-label="Map explorer">
         <div class="panel-top">
           <a class="brand" href="./" aria-label="JUJU World home">
@@ -114,6 +151,7 @@
           <button id="save-slot-create" type="button" data-i18n="saveSlotCreate">SAVE CURRENT</button>
         </div>
         <div id="save-slots-list" class="save-slots-list"></div>
+        <button id="save-slots-back" class="save-slots-back" type="button">← MENU PRINCIPAL</button>
         <button id="resume-session-new" class="save-new-exploration" type="button" data-i18n="resumeNew">NEW EXPLORATION</button>
       </section>
       <section class="game-hud" aria-label="Game controls">
