@@ -35,7 +35,9 @@ const translations = {
     poiTransport: "Public transport",
     poiCommerce: "Shops & services",
     poiCulture: "Culture & landmarks",
-    poiHealth: "Health services",\n    poiLegend: "MAP LEGEND",\n    poiZoomNote: "Visible when you zoom into a city (zoom 13+).",
+    poiHealth: "Health services",
+    poiLegend: "MAP LEGEND",
+    poiZoomNote: "Visible when you zoom into a city (zoom 13+).",
     poiUnnamed: "Unnamed place",
     poiDetails: "Mapped place · OpenStreetMap data",
   },
@@ -69,7 +71,9 @@ const translations = {
     poiTransport: "Transports publics",
     poiCommerce: "Commerces et services",
     poiCulture: "Culture et monuments",
-    poiHealth: "Services de santé",\n    poiLegend: "LÉGENDE DE LA CARTE",\n    poiZoomNote: "Visible en zoomant sur une ville (niveau 13+).",
+    poiHealth: "Services de santé",
+    poiLegend: "LÉGENDE DE LA CARTE",
+    poiZoomNote: "Visible en zoomant sur une ville (niveau 13+).",
     poiUnnamed: "Lieu sans nom",
     poiDetails: "Lieu cartographié · Données OpenStreetMap",
   },
@@ -87,7 +91,8 @@ const searchResults = $("#search-results");
 const toast = $("#toast");
 let language: Language = "en";
 let buildingsVisible = true;
-let terrainEnabled = false;\nlet placesVisible = true;
+let terrainEnabled = false;
+let placesVisible = true;
 let toastTimeout = 0;
 let selectedPlaceMarker: maplibregl.Marker | null = null;
 
