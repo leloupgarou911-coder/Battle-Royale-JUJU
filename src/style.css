@@ -857,3 +857,43 @@ button:focus-visible,input:focus-visible{outline:2px solid #8fe2d9;outline-offse
   0%, 100% { box-shadow: 0 0 0 3px rgba(121, 217, 208, .16), 0 2px 9px rgba(0,0,0,.5); }
   50% { box-shadow: 0 0 0 6px rgba(121, 217, 208, .08), 0 2px 9px rgba(0,0,0,.5); }
 }
+
+
+/* Floor navigation is shown only when map metadata confirms multiple levels. */
+.interior-floor-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 12px auto 14px;
+}
+.interior-floor-controls[hidden] {
+  display: none;
+}
+.interior-floor-controls strong {
+  min-width: 116px;
+  color: var(--text-primary, #e8f3f6);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+.interior-floor-controls button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(117, 220, 211, 0.3);
+  border-radius: 9px;
+  background: rgba(117, 220, 211, 0.08);
+  color: #8de5dc;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.interior-floor-controls button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.interior-floor-controls button:focus-visible {
+  outline: 2px solid #8de5dc;
+  outline-offset: 3px;
+}
