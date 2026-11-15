@@ -421,6 +421,89 @@ function createZoneObstacles(zoneX: number, zoneY: number): GeoJSON.FeatureColle
 
 function ensureGameLayers(): void {
   if (!map.getSource("openmaptiles")) return;
+
+  // Real-world land cover from OpenMapTiles, shown only in game mode.
+  if (!map.getLayer("juju-game-greenery")) {
+    map.addLayer({
+      id: "juju-game-greenery",
+      type: "fill",
+      source: "openmaptiles",
+      "source-layer": "landcover",
+      minzoom: 10,
+      filter: ["in", ["get", "class"], ["literal", ["wood", "grass", "scrub", "farmland", "orchard"]]],
+      paint: {
+        "fill-color": ["match", ["get", "class"], "wood", "#315f43", "grass", "#628b54", "scrub", "#58734a", "farmland", "#8b9861", "orchard", "#66834c", "#58734a"],
+        "fill-opacity": 0.38,
+      },
+      layout: { visibility: "none" },
+    });
+  }
+
+  // Real mapped buildings are drawn as solid game obstacles.
+  if (!map.getLayer("juju-game-buildings")) {
+    map.addLayer({
+      id: "juju-game-buildings",
+      type: "fill",
+      source: "openmaptiles",
+      "source-layer": "building",
+      minzoom: 14,
+      filter: ["==", ["geometry-type"], "Polygon"],
+      paint: {
+        "fill-color": "#b7a995",
+        "fill-opacity": 0.72,
+        "fill-outline-color": "#554d43",
+      },
+      layout: { visibility: "none" },
+    });
+  }
+
+  // OpenStreetMap road classes remain passable; separate casing and surface lines
+  // make streets, paths and tracks readable at the fixed overhead camera.
+  const playableRoadClasses = [
+    "motorway", "trunk", "primary", "secondary", "tertiary",
+    "minor", "residential", "unclassified", "service", "living_street",
+    "pedestrian", "track", "path", "footway", "cycleway", "steps",
+  ];
+  if (!map.getLayer("juju-game-roads-casing")) {
+    map.addLayer({
+      id: "juju-game-roads-casing",
+      type: "line",
+      source: "openmaptiles",
+      "source-layer": "transportation",
+      minzoom: 12,
+      filter: ["in", ["get", "class"], ["literal", playableRoadClasses]],
+      paint: {
+        "line-color": "#293a3a",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.8, 16, 5.5, 19, 10],
+        "line-opacity": 0.88,
+      },
+      layout: { visibility: "none", "line-cap": "round", "line-join": "round" },
+    });
+  }
+  if (!map.getLayer("juju-game-roads")) {
+    map.addLayer({
+      id: "juju-game-roads",
+      type: "line",
+      source: "openmaptiles",
+      "source-layer": "transportation",
+      minzoom: 12,
+      filter: ["in", ["get", "class"], ["literal", playableRoadClasses]],
+      paint: {
+        "line-color": [
+          "match", ["get", "class"],
+          "motorway", "#d6a36e", "trunk", "#d6a36e",
+          "primary", "#e0c18d", "secondary", "#d4c39e",
+          "tertiary", "#c6bda9", "residential", "#b8b5a8",
+          "service", "#9eaa9e", "track", "#a18c68",
+          "path", "#b9a77d", "footway", "#c8b58a",
+          "cycleway", "#8fb7a2", "#b8b5a8",
+        ],
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.35, 16, 3.2, 19, 7],
+        "line-opacity": 0.98,
+      },
+      layout: { visibility: "none", "line-cap": "round", "line-join": "round" },
+    });
+  }
   if (!map.getLayer("juju-collision-buildings")) {
     map.addLayer({
       id: "juju-collision-buildings",
@@ -503,7 +586,8 @@ function setGameWorldVisibility(visible: boolean): void {
   const visibility = visible ? "visible" : "none";
   [
     "juju-zone-fill", "juju-zone-outline", "juju-zone-rocks",
-    "juju-zone-trees", "juju-zone-spawn-marker",
+    "juju-zone-trees", "juju-zone-spawn-marker", "juju-game-greenery",
+    "juju-game-buildings", "juju-game-roads-casing", "juju-game-roads",
   ].forEach((id) => {
     if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visibility);
   });
