@@ -203,11 +203,11 @@
       </section>
       <section id="game-3d-overlay" class="game-3d-overlay" hidden aria-label="JUJU WORLD 3D prototype">
         <header class="game-3d-toolbar">
-          <div><strong>JUJU WORLD · 3D PROTOTYPE</strong><span>Fictional test environment — not yet connected to real map geometry</span></div>
-          <button id="game-3d-exit" type="button">BACK TO MAP</button>
+          <div><strong data-i18n="game3dTitle">JUJU WORLD · 3D PROTOTYPE</strong><span data-i18n="game3dDescription">Fictional test environment — not yet connected to real map geometry</span></div>
+          <button id="game-3d-exit" type="button" data-i18n="game3dExit">BACK TO MAP</button>
         </header>
-        <div id="game-3d-canvas" class="game-3d-canvas"></div>
-        <div class="game-3d-help">WASD / ZQSD to move · Mouse to look · Click the scene to capture the pointer</div>
+        <div id="game-3d-canvas" class="game-3d-canvas"></div><p id="game-3d-position" class="game-3d-position" aria-live="polite">LOCAL 3D POSITION · 0.0 / 0.0 m</p>
+        <div class="game-3d-help" data-i18n="game3dHelp">WASD / ZQSD to move · Mouse to look · Click the scene to capture the pointer</div>
       </section>
       <div class="map-hint"><span class="hint-icon">⌖</span><span data-i18n="hint">Drag to move · Scroll to zoom · Right-click to tilt</span></div>
       <div id="toast" class="toast" role="status"></div>
