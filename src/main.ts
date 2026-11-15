@@ -1,6 +1,8 @@
 import maplibregl, { type Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
+import { createZoneObstacles, legacyMercatorZoneCenter, spawnForZone, zoneAtOffset, zoneFor, zonePolygon } from "./game/zones.ts";
+import { destinationFromDirection, haversineDistance, normalizeDirection } from "./game/movement.ts";
 
 type Language = "en" | "fr";
 
@@ -275,8 +277,6 @@ let activeZoneKey = "";
 let interiorPosition = { x: 2, y: 4 };
 let interiorLastDirection = "down";
 let interiorLastMessage = "";
-const GAME_ZONE_METERS = 750;
-const WORLD_METERS = 40075016.68557849;
 type StreamingTier = "economy" | "balanced" | "performance";
 interface NetworkInformationLike extends EventTarget {
   effectiveType?: string;
@@ -313,7 +313,8 @@ let vectorTileTemplatesPromise: Promise<string[]> | null = null;
 const prefetchedVectorTiles = new Set<string>();
 const pendingVectorTiles = new Set<string>();
 const zoneObstacleCache = new Map<string, GeoJSON.FeatureCollection<GeoJSON.Point>>();
-const EXPLORED_STORAGE_KEY = "juju-world-explored-zones-v1";
+const EXPLORED_STORAGE_KEY = "juju-world-explored-zones-v2";
+const LEGACY_EXPLORED_STORAGE_KEY = "juju-world-explored-zones-v1";
 const SESSION_STORAGE_KEY = "juju-world-session-v1";
 const SAVE_SLOTS_STORAGE_KEY = "juju-world-save-slots-v1";
 const SESSION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
@@ -389,9 +390,7 @@ function discoverProgressCity(name:string,country?:string):void {
  slot.progress.cities.push(key);if(slot.progress.cities.length>200)slot.progress.cities.shift();slot.progress.xp+=50;updateDailyMission(slot,"city",1);checkAchievements(slot.progress);saveProgress();
 }
 function addTravelDistance(from:maplibregl.LngLat,to:maplibregl.LngLat):void {
- const slot=activeSlot();if(!slot)return;const rad=Math.PI/180,lat1=from.lat*rad,lat2=to.lat*rad,dLat=(to.lat-from.lat)*rad,dLng=(to.lng-from.lng)*rad;
- const a=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
- const meters=6371000*2*Math.atan2(Math.sqrt(a),Math.sqrt(Math.max(0,1-a)));if(!Number.isFinite(meters)||meters<=0||meters>100)return;
+ const slot=activeSlot();if(!slot)return;const meters=haversineDistance(from,to);if(!Number.isFinite(meters)||meters<=0||meters>100)return;
  slot.progress.distanceMeters+=meters;const total=slot.progress.remainder+meters;const xp=Math.floor(total/25);slot.progress.remainder=total-xp*25;if(xp>0)slot.progress.xp+=xp;
  updateDailyMission(slot,"distance",meters);checkAchievements(slot.progress);if(xp>0)saveProgress();
 }
@@ -721,14 +720,28 @@ const exploredZones = new Map<string, ExploredZone>();
 function loadExploredZones(): void {
   try {
     const raw = localStorage.getItem(EXPLORED_STORAGE_KEY);
-    if (!raw) return;
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return;
-    for (const item of parsed) {
-      if (!item || !Number.isInteger(item.x) || !Number.isInteger(item.y)
-        || !Number.isFinite(item.visitedAt)) continue;
-      const zone: ExploredZone = { x: item.x, y: item.y, visitedAt: item.visitedAt };
-      exploredZones.set(`${zone.x}:${zone.y}`, zone);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        if (!item || !Number.isInteger(item.x) || !Number.isInteger(item.y)
+          || !Number.isFinite(item.visitedAt)) continue;
+        const zone: ExploredZone = { x: item.x, y: item.y, visitedAt: item.visitedAt };
+        exploredZones.set(`${zone.x}:${zone.y}`, zone);
+      }
+    } else {
+      // Migrate v1 Web-Mercator tile indices to the latitude-aware geographic grid.
+      const legacyRaw = localStorage.getItem(LEGACY_EXPLORED_STORAGE_KEY);
+      const legacy: unknown = legacyRaw ? JSON.parse(legacyRaw) : null;
+      if (Array.isArray(legacy)) {
+        for (const item of legacy) {
+          if (!item || !Number.isInteger(item.x) || !Number.isInteger(item.y)
+            || !Number.isFinite(item.visitedAt)) continue;
+          const [lng, lat] = legacyMercatorZoneCenter(item.x, item.y);
+          const migrated = zoneFor(lng, lat);
+          exploredZones.set(migrated.key, { x: migrated.x, y: migrated.y, visitedAt: item.visitedAt });
+        }
+        saveExploredZones();
+      }
     }
     while (exploredZones.size > EXPLORED_ZONE_LIMIT) {
       const oldest = exploredZones.keys().next().value;
@@ -1174,91 +1187,7 @@ function disableTerrain(): void {
   $("#terrain-view").classList.remove("active");
 }
 
-function mercatorPosition(lng: number, lat: number): { x: number; y: number } {
-  const clampedLat = Math.max(-85.051129, Math.min(85.051129, lat));
-  const radians = clampedLat * Math.PI / 180;
-  return {
-    x: (lng + 180) / 360,
-    y: (1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2,
-  };
-}
-
-function zoneFor(lng: number, lat: number): { x: number; y: number; key: string } {
-  const size = GAME_ZONE_METERS / WORLD_METERS;
-  const point = mercatorPosition(lng, lat);
-  const x = Math.floor(point.x / size);
-  const y = Math.floor(point.y / size);
-  return { x, y, key: `${x}:${y}` };
-}
-
-function spawnForZone(zoneX: number, zoneY: number): [number, number] {
-  const size = GAME_ZONE_METERS / WORLD_METERS;
-  const x = (zoneX + 0.5) * size;
-  const y = (zoneY + 0.5) * size;
-  return [
-    x * 360 - 180,
-    Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180 / Math.PI,
-  ];
-}
-
-function zonePolygon(zoneX: number, zoneY: number): GeoJSON.Feature<GeoJSON.Polygon> {
-  const size = GAME_ZONE_METERS / WORLD_METERS;
-  const west = zoneX * size;
-  const east = west + size;
-  const north = zoneY * size;
-  const south = north + size;
-  const toLngLat = (x: number, y: number): [number, number] => [
-    x * 360 - 180,
-    Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180 / Math.PI,
-  ];
-  return {
-    type: "Feature",
-    properties: {},
-    geometry: { type: "Polygon", coordinates: [[
-      toLngLat(west, north), toLngLat(east, north),
-      toLngLat(east, south), toLngLat(west, south),
-      toLngLat(west, north),
-    ]] },
-  };
-}
-
-function createZoneObstacles(zoneX: number, zoneY: number): GeoJSON.FeatureCollection<GeoJSON.Point> {
-  // Keep a small LRU cache so revisiting a streamed zone does not regenerate its scenery.
-  const cacheKey = `${zoneX}:${zoneY}`;
-  const cached = zoneObstacleCache.get(cacheKey);
-  if (cached) {
-    zoneObstacleCache.delete(cacheKey);
-    zoneObstacleCache.set(cacheKey, cached);
-    return cached;
-  }
-  // Deterministic decorative obstacles: the same zone always recreates the same layout.
-  let seed = Math.abs((zoneX * 73856093) ^ (zoneY * 19349663)) || 1;
-  const random = (): number => {
-    seed = (seed * 16807) % 2147483647;
-    return (seed - 1) / 2147483646;
-  };
-  const size = GAME_ZONE_METERS / WORLD_METERS;
-  const features: GeoJSON.Feature<GeoJSON.Point>[] = [];
-  for (let i = 0; i < 28; i += 1) {
-    const localX = 0.08 + random() * 0.84;
-    const localY = 0.08 + random() * 0.84;
-    // Keep the central spawn point clear.
-    if (Math.hypot(localX - 0.5, localY - 0.5) < 0.13) continue;
-    const x = (zoneX + localX) * size;
-    const y = (zoneY + localY) * size;
-    const lng = x * 360 - 180;
-    const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180 / Math.PI;
-    features.push({
-      type: "Feature",
-      properties: { kind: random() > 0.28 ? "tree" : "rock", radius: random() > 0.5 ? 13 : 10 },
-      geometry: { type: "Point", coordinates: [lng, lat] },
-    });
-  }
-  const collection: GeoJSON.FeatureCollection<GeoJSON.Point> = { type: "FeatureCollection", features };
-  zoneObstacleCache.set(cacheKey, collection);
-  trimZoneObstacleCache();
-  return collection;
-}
+function trimZoneObstacleCache(): void {
 
 function trimZoneObstacleCache(): void {
   while (zoneObstacleCache.size > streamingProfile.zoneCacheLimit) {
@@ -1280,12 +1209,15 @@ function warmPredictiveZones(lng: number, lat: number, directionX: number, direc
   if (signature === lastPredictionSignature) return;
   lastPredictionSignature = signature;
   for (let distance = 1; distance <= depth; distance += 1) {
-    const centerX = origin.x + stepX * distance;
-    const centerY = origin.y + stepY * distance;
+    const center = zoneAtOffset(origin.x, origin.y, stepX * distance, stepY * distance);
     for (let side = -1; side <= 1; side += 1) {
-      const zoneX = centerX + (stepY !== 0 ? side : 0);
-      const zoneY = centerY + (stepX !== 0 ? side : 0);
-      createZoneObstacles(zoneX, zoneY);
+      const neighbour = zoneAtOffset(
+        center.x,
+        center.y,
+        stepY !== 0 ? side : 0,
+        stepX !== 0 ? side : 0,
+      );
+      createZoneObstacles(neighbour.x, neighbour.y);
     }
   }
   trimZoneObstacleCache();
@@ -1595,8 +1527,10 @@ function updateGameZone(lng: number, lat: number): void {
   recordExploredZone(zone.x, zone.y);
   if (gameMode) discoverProgressZone(zone.x, zone.y);
   protectedZoneKeys = new Set<string>();
-  for (let x = -1; x <= 1; x += 1) {
-    for (let y = -1; y <= 1; y += 1) protectedZoneKeys.add(`${zone.x + x}:${zone.y + y}`);
+  for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+    for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+      protectedZoneKeys.add(zoneAtOffset(zone.x, zone.y, offsetX, offsetY).key);
+    }
   }
   const source = map.getSource("juju-active-zone") as maplibregl.GeoJSONSource | undefined;
   source?.setData(zonePolygon(zone.x, zone.y));
@@ -1606,7 +1540,8 @@ function updateGameZone(lng: number, lat: number): void {
   const warmRadius = streamingProfile.tier === "economy" ? 1 : 2;
   for (let offsetX = -warmRadius; offsetX <= warmRadius; offsetX += 1) {
     for (let offsetY = -warmRadius; offsetY <= warmRadius; offsetY += 1) {
-      const zoneFeatures = createZoneObstacles(zone.x + offsetX, zone.y + offsetY).features;
+      const neighbour = zoneAtOffset(zone.x, zone.y, offsetX, offsetY);
+      const zoneFeatures = createZoneObstacles(neighbour.x, neighbour.y).features;
       if (Math.abs(offsetX) <= 1 && Math.abs(offsetY) <= 1) nearbyFeatures.push(...zoneFeatures);
     }
   }
@@ -2026,25 +1961,11 @@ function movementTick(time: number): void {
   }
   const length = Math.hypot(dx, dy);
   if (length > 0 && delta > 0) {
-    dx /= length;
-    dy /= length;
+    const direction = normalizeDirection({ x: dx, y: dy });
+    if (!direction) return;
     const center = map.getCenter();
-    const distance = movementSpeed * delta;
-    const bearing = Math.atan2(dx, -dy);
-    const angularDistance = distance / 6371000;
-    const latitude = center.lat * Math.PI / 180;
-    const nextLatitude = Math.asin(
-      Math.sin(latitude) * Math.cos(angularDistance)
-      + Math.cos(latitude) * Math.sin(angularDistance) * Math.cos(bearing),
-    );
-    const nextLongitude = center.lng * Math.PI / 180 + Math.atan2(
-      Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(latitude),
-      Math.cos(angularDistance) - Math.sin(latitude) * Math.sin(nextLatitude),
-    );
-    const next = new maplibregl.LngLat(
-      ((nextLongitude * 180 / Math.PI + 540) % 360) - 180,
-      nextLatitude * 180 / Math.PI,
-    );
+    const destination = destinationFromDirection(center, direction, movementSpeed * delta);
+    const next = new maplibregl.LngLat(destination.lng, destination.lat);
     if (isBuildingCollision(next.lng, next.lat)) {
       $("#game-player-status").textContent = language === "en" ? "BLOCKED" : "BLOQUÉ";
       heldDirections.clear();
