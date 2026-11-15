@@ -5,6 +5,8 @@ type MappedBuildingFeature = GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPoly
 type MappedRoadFeature = GeoJSON.Feature<GeoJSON.LineString | GeoJSON.MultiLineString>;
 interface TerrainSample { x: number; z: number; elevation: number; }
 interface GameWorldData { origin: [number, number]; buildings: MappedBuildingFeature[]; roads: MappedRoadFeature[]; terrain: TerrainSample[]; terrainSize: number; terrainSegments: number; }
+interface BuildingCollisionShape { minX: number; maxX: number; minZ: number; maxZ: number; rings: [number, number][][]; }
+interface ObstacleCollider { x: number; z: number; radius: number; }
 
 export class Game {
   private readonly scene = new THREE.Scene();
@@ -31,6 +33,12 @@ export class Game {
   private readonly jumpImpulse = 6.2;
   private readonly maxStepHeight = 0.65;
   private readonly cameraRaycaster = new THREE.Raycaster();
+  private readonly buildingCollisionShapes: BuildingCollisionShape[] = [];
+  private readonly cameraObstacles: THREE.Object3D[] = [];
+  private readonly obstacleColliders: ObstacleCollider[] = [];
+  private readonly animatedLimbs: THREE.Group[] = [];
+  private playerTorso: THREE.Mesh | null = null;
+  private walkPhase = 0;
 
   constructor(
     private readonly container: HTMLElement,
@@ -138,6 +146,13 @@ export class Game {
         const outer = polygon[0];
         if (!outer || outer.length < 4) continue;
         const points = outer.map(([lng, lat]) => this.geographicToLocal(lng, lat));
+        const localRings = polygon.map((ring) => ring.map(([lng, lat]) => this.geographicToLocal(lng, lat)));
+        const xs = points.map(([x]) => x);
+        const zs = points.map(([, z]) => z);
+        this.buildingCollisionShapes.push({
+          minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs),
+          rings: localRings,
+        });
         const shape = new THREE.Shape();
         shape.moveTo(points[0][0], -points[0][1]);
         for (let i = 1; i < points.length; i += 1) shape.lineTo(points[i][0], -points[i][1]);
@@ -151,6 +166,7 @@ export class Game {
         building.castShadow = true;
         building.receiveShadow = true;
         building.name = "mapped-building";
+        this.cameraObstacles.push(building);
         this.scene.add(building);
       }
     }
@@ -260,17 +276,31 @@ export class Game {
     return inside;
   }
 
-  private collidesWithBuilding(x: number, z: number): boolean {
+  private isInsideLocalRing(x: number, z: number, ring: [number, number][]): boolean {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+      const a = ring[i], b = ring[j];
+      if ((a[1] > z) !== (b[1] > z) &&
+        x < ((b[0] - a[0]) * (z - a[1])) / ((b[1] - a[1]) || 1e-9) + a[0]) inside = !inside;
+    }
+    return inside;
+  }
+
+  private collidesWithEnvironment(x: number, z: number): boolean {
     const radius = 0.62;
     const offsets: [number, number][] = [[0, 0], [radius, 0], [-radius, 0], [0, radius], [0, -radius],
       [radius * 0.7, radius * 0.7], [-radius * 0.7, radius * 0.7], [radius * 0.7, -radius * 0.7], [-radius * 0.7, -radius * 0.7]];
-    for (const feature of this.worldData.buildings) {
-      const polygons = feature.geometry.type === "Polygon" ? [feature.geometry.coordinates] : feature.geometry.coordinates;
-      for (const polygon of polygons) {
-        const outer = polygon[0];
-        if (!outer || outer.length < 4) continue;
-        if (offsets.some(([ox, oz]) => this.isInsideRing(x + ox, z + oz, outer))) return true;
-      }
+    for (const building of this.buildingCollisionShapes) {
+      if (x + radius < building.minX || x - radius > building.maxX ||
+        z + radius < building.minZ || z - radius > building.maxZ) continue;
+      const touchesOuter = offsets.some(([ox, oz]) => this.isInsideLocalRing(x + ox, z + oz, building.rings[0]));
+      const insideHole = building.rings.slice(1).some((hole) => this.isInsideLocalRing(x, z, hole));
+      if (touchesOuter && !insideHole) return true;
+    }
+    for (const obstacle of this.obstacleColliders) {
+      const combined = radius + obstacle.radius;
+      if (Math.abs(x - obstacle.x) > combined || Math.abs(z - obstacle.z) > combined) continue;
+      if (Math.hypot(x - obstacle.x, z - obstacle.z) < combined) return true;
     }
     return false;
   }
@@ -354,6 +384,7 @@ export class Game {
     );
     trunk.position.set(x, 1.4, z);
     trunk.castShadow = true;
+    this.obstacleColliders.push({ x, z, radius: 0.78 });
     this.scene.add(trunk);
 
     const leaves = new THREE.Mesh(
@@ -367,13 +398,35 @@ export class Game {
   }
 
   private buildPlayer(): void {
-    const body = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.48, 1.05, 4, 8),
-      new THREE.MeshStandardMaterial({ color: 0xd69b68, roughness: 0.8 }),
-    );
-    body.position.y = 1.25;
-    body.castShadow = true;
-    this.player.add(body);
+    const skin = new THREE.MeshStandardMaterial({ color: 0xd69b68, roughness: 0.82 });
+    const outfit = new THREE.MeshStandardMaterial({ color: 0x3d6470, roughness: 0.9 });
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.38, 0.72, 4, 8), outfit);
+    torso.position.y = 1.18;
+    torso.castShadow = true;
+    this.playerTorso = torso;
+    this.player.add(torso);
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.27, 10, 8), skin);
+    head.position.y = 1.92;
+    head.castShadow = true;
+    this.player.add(head);
+
+    const makeLimb = (length: number, material: THREE.Material, x: number, y: number): THREE.Group => {
+      const pivot = new THREE.Group();
+      pivot.position.set(x, y, 0);
+      const limb = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, length, 3, 6), material);
+      limb.position.y = -length * 0.42;
+      limb.castShadow = true;
+      pivot.add(limb);
+      this.player.add(pivot);
+      this.animatedLimbs.push(pivot);
+      return pivot;
+    };
+    makeLimb(0.62, outfit, -0.48, 1.48);
+    makeLimb(0.62, outfit, 0.48, 1.48);
+    makeLimb(0.72, outfit, -0.2, 0.78);
+    makeLimb(0.72, outfit, 0.2, 0.78);
+
     this.player.position.set(0, 0, 0);
     this.scene.add(this.player);
   }
@@ -427,13 +480,14 @@ export class Game {
     if (this.keys.has("d") || this.keys.has("arrowright")) this.direction.add(this.right);
     if (this.keys.has("a") || this.keys.has("q") || this.keys.has("arrowleft")) this.direction.sub(this.right);
 
-    if (this.direction.lengthSq() > 0) {
+    const isMoving = this.direction.lengthSq() > 0;
+    if (isMoving) {
       this.direction.normalize();
       const dx = this.direction.x * speed * delta;
       const dz = this.direction.z * speed * delta;
       const currentGround = this.terrainHeightAt(this.player.position.x, this.player.position.z);
       const canStepTo = (x: number, z: number): boolean => {
-        if (this.collidesWithBuilding(x, z)) return false;
+        if (this.collidesWithEnvironment(x, z)) return false;
         const nextGround = this.terrainHeightAt(x, z);
         // Walk up gentle slopes and small steps; steep faces need a jump.
         return nextGround - currentGround <= this.maxStepHeight;
@@ -455,6 +509,18 @@ export class Game {
       this.player.position.y = floor;
       this.verticalVelocity = 0;
     }
+    if (isMoving) {
+      this.walkPhase += delta * (this.keys.has("shift") ? 13 : 8);
+      this.player.rotation.y = Math.atan2(this.direction.x, this.direction.z);
+    }
+    const airborne = this.player.position.y > floor + 0.08;
+    const swing = isMoving && !airborne ? Math.sin(this.walkPhase) * (this.keys.has("shift") ? 0.72 : 0.48) : 0;
+    this.animatedLimbs.forEach((limb, index) => {
+      limb.rotation.x = airborne ? (index >= 2 ? -0.42 : 0.35) : (index % 2 === 0 ? swing : -swing);
+    });
+    if (this.playerTorso) {
+      this.playerTorso.position.y = 1.18 + (isMoving && !airborne ? Math.abs(Math.sin(this.walkPhase * 2)) * 0.045 : 0);
+    }
   }
 
   private updateCamera(delta: number): void {
@@ -471,8 +537,7 @@ export class Game {
     const desiredDistance = rayDirection.length();
     this.cameraRaycaster.set(target, rayDirection.normalize());
     this.cameraRaycaster.far = desiredDistance;
-    const obstacles = this.scene.children.filter((object) => object.name === "mapped-building");
-    const hit = this.cameraRaycaster.intersectObjects(obstacles, false)[0];
+    const hit = this.cameraRaycaster.intersectObjects(this.cameraObstacles, false)[0];
     if (hit) desired.copy(target).addScaledVector(rayDirection.normalize(), Math.max(1.1, hit.distance - 0.35));
     this.camera.position.lerp(desired, 1 - Math.pow(0.001, delta));
     this.camera.lookAt(target);
