@@ -24,11 +24,11 @@ export function classifyBuilding(tags: Record<string, unknown>): BuildingKind {
   const values = ["building", "class", "type", "amenity", "shop", "office", "name", "name_en"]
     .map((key) => String(tags[key] ?? "").toLowerCase()).join(" ");
   if (/school|college|university|kindergarten|education/.test(values)) return "school";
+  if (/industrial|warehouse|factory|manufacture|workshop/.test(values)) return "industrial";
   if (/apartments|residential|dormitory|flats/.test(values)) return "apartment";
   if (/house|detached|semidetached_house|terrace|bungalow|villa/.test(values)) return "house";
   if (/retail|commercial|supermarket|convenience|shop|bakery|clothes|pharmacy/.test(values)) return "shop";
   if (/office|government|bank|administrative|company/.test(values)) return "office";
-  if (/industrial|warehouse|factory|manufacture|workshop/.test(values)) return "industrial";
   return "other";
 }
 
