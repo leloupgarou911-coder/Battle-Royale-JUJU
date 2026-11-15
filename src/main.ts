@@ -14,6 +14,12 @@ const translations = {
     mapView: "MAP VIEW",
     flat: "2D MAP",
     gameCamera: "TOP-DOWN GAME CAMERA",
+    enterGame: "ENTER GAME MODE",
+    exitGame: "EXIT GAME MODE",
+    loadZone: "RELOAD CURRENT ZONE",
+    zoneReady: "ZONE READY",
+    moveHelp: "WASD / ARROWS TO MOVE",
+    playerReady: "PLAYER READY",
     globe: "3D GLOBE",
     buildings: "3D BUILDINGS",
     terrain: "3D TERRAIN",
@@ -51,6 +57,12 @@ const translations = {
     mapView: "VUE DE LA CARTE",
     flat: "CARTE 2D",
     gameCamera: "CAMÉRA AÉRIENNE DU JEU",
+    enterGame: "ENTRER EN MODE JEU",
+    exitGame: "QUITTER LE MODE JEU",
+    loadZone: "RECHARGER LA ZONE",
+    zoneReady: "ZONE CHARGÉE",
+    moveHelp: "ZQSD / FLÈCHES POUR BOUGER",
+    playerReady: "JOUEUR PRÊT",
     globe: "GLOBE 3D",
     buildings: "BÂTIMENTS 3D",
     terrain: "RELIEF 3D",
@@ -97,6 +109,8 @@ let terrainEnabled = false;
 let placesVisible = true;
 let toastTimeout = 0;
 let selectedPlaceMarker: maplibregl.Marker | null = null;
+let gameMode = false;
+let playerMarker: maplibregl.Marker | null = null;
 
 const map: MapLibreMap = new maplibregl.Map({
   container: "map",
@@ -327,10 +341,67 @@ function disableTerrain(): void {
   $("#terrain-view").classList.remove("active");
 }
 
-function setGameCamera(): void {
+function updateGameHud(): void {
+  const center = map.getCenter();
+  $("#game-zone-coordinates").textContent = `${center.lat.toFixed(3)}, ${center.lng.toFixed(3)}`;
+}
+
+function startGameMode(): void {
+  gameMode = true;
   disableTerrain();
   map.setProjection({ type: "mercator" });
-  map.easeTo({ center: [0, 20], zoom: 2.1, pitch: 0, bearing: 0, duration: 900 });
+  map.setPitch(0);
+  map.setBearing(0);
+  map.dragRotate.disable();
+  map.touchZoomRotate.disableRotation();
+  const spawn = map.getCenter();
+  const player = document.createElement("div");
+  player.className = "juju-player";
+  player.setAttribute("role", "img");
+  player.setAttribute("aria-label", "Player");
+  playerMarker?.remove();
+  playerMarker = new maplibregl.Marker({ element: player, anchor: "center" }).setLngLat(spawn).addTo(map);
+  map.easeTo({ center: spawn, zoom: Math.max(16, map.getZoom()), pitch: 0, bearing: 0, duration: 850 });
+  $("#app").classList.add("game-mode");
+  $("#game-mode-toggle").textContent = translations[language].exitGame;
+  $("#game-zone-status").textContent = translations[language].zoneReady;
+  $("#game-player-status").textContent = translations[language].playerReady;
+  $("#game-camera").classList.add("active");
+  $("#flat-view").classList.add("active");
+  $("#globe-view").classList.remove("active");
+  $("#place-card").hidden = true;
+  selectedPlaceMarker?.remove();
+  selectedPlaceMarker = null;
+  updateGameHud();
+  showToast(language === "en" ? "Game mode enabled. Move with WASD or arrow keys." : "Mode jeu activé. Déplacez-vous avec ZQSD ou les flèches.");
+}
+
+function stopGameMode(): void {
+  gameMode = false;
+  playerMarker?.remove();
+  playerMarker = null;
+  $("#app").classList.remove("game-mode");
+  $("#game-mode-toggle").textContent = translations[language].enterGame;
+  map.easeTo({ pitch: 0, bearing: 0, duration: 400 });
+}
+
+function movePlayer(dx: number, dy: number): void {
+  if (!gameMode || !playerMarker) return;
+  const center = map.getCenter();
+  const point = map.project(center);
+  const next = map.unproject([point.x + dx, point.y + dy]);
+  playerMarker.setLngLat(next);
+  map.easeTo({ center: next, duration: 90, easing: (t) => t });
+  updateGameHud();
+}
+
+function setGameCamera(): void {
+  if (gameMode) {
+    stopGameMode();
+    return;
+  }
+  startGameMode();
+  map.setProjection({ type: "mercator" });
   $("#flat-view").classList.add("active");
   $("#globe-view").classList.remove("active");
   $("#game-camera").classList.add("active");
@@ -353,6 +424,8 @@ function setMapView(view: "flat" | "globe"): void {
   $("#game-camera").classList.remove("active");
   $("#globe-view").classList.toggle("active", !isFlat);
 }
+
+map.on("moveend", () => { if (gameMode) updateGameHud(); });
 
 map.on("load", () => {
   mapStatus.textContent = translations[language].ready;
@@ -394,6 +467,32 @@ $("#language-toggle").addEventListener("click", () => {
 
 $("#flat-view").addEventListener("click", () => setMapView("flat"));
 $("#game-camera").addEventListener("click", setGameCamera);
+$("#game-mode-toggle").addEventListener("click", () => gameMode ? stopGameMode() : startGameMode());
+$("#game-zone-reload").addEventListener("click", () => {
+  if (!gameMode) return;
+  map.resize();
+  map.triggerRepaint();
+  updateGameHud();
+  $("#game-zone-status").textContent = translations[language].zoneReady;
+  showToast(language === "en" ? "Visible map zone refreshed." : "Zone cartographique visible actualisée.");
+});
+window.addEventListener("keydown", (event) => {
+  if (!gameMode || event.repeat && !["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "a", "s", "d", "z", "q"].includes(event.key)) return;
+  const target = event.target as HTMLElement | null;
+  if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+  const key = event.key.toLowerCase();
+  const step = 9;
+  const directions: Record<string, [number, number]> = {
+    arrowup: [0, -step], w: [0, -step], z: [0, -step],
+    arrowdown: [0, step], s: [0, step],
+    arrowleft: [-step, 0], a: [-step, 0], q: [-step, 0],
+    arrowright: [step, 0], d: [step, 0],
+  };
+  const direction = directions[key];
+  if (!direction) return;
+  event.preventDefault();
+  movePlayer(direction[0], direction[1]);
+});
 $("#globe-view").addEventListener("click", () => setMapView("globe"));
 
 $("#terrain-view").addEventListener("click", () => {
