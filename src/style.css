@@ -243,3 +243,34 @@ h1 span { color: var(--gold); }
   font: 800 9px "DM Sans",sans-serif; letter-spacing: .12em;
 }
 .interior-exit:hover { background: rgba(228,183,127,.25); }
+
+
+/* Interactive 2D building interior */
+.interior-panel { width: min(760px, 100%); }
+.interior-controls, .interior-room-status, .interior-message { color: #aeb9bf; font-size: 10px; line-height: 1.5; }
+.interior-room-status { margin: 12px 0 8px; color: #e4b77f; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.interior-board {
+  display: grid; grid-template-columns: repeat(12, minmax(20px, 1fr));
+  grid-template-rows: repeat(8, clamp(26px, 5vw, 42px)); gap: 2px;
+  width: 100%; padding: 7px; border: 2px solid #8b9a91; border-radius: 7px;
+  background: #101a20; overflow: hidden;
+}
+.interior-cell { display: grid; place-items: center; min-width: 0; min-height: 0; border-radius: 3px; position: relative; }
+.interior-floor { background: #b69d7a; box-shadow: inset 0 0 0 1px rgba(65,47,32,.18); }
+.interior-floor.floor-alt { background: #c2aa86; }
+.interior-wall { background: #46535a; box-shadow: inset 0 0 0 2px #65747a; }
+.interior-door { background: #d7a75f; color: #26343b; font-size: 18px; font-weight: 900; }
+.interior-furniture { z-index: 1; background: #526f65; color: #fff; border: 2px solid #d4c2a3; box-shadow: 0 3px 7px rgba(0,0,0,.28); font-size: clamp(12px, 2vw, 20px); cursor: pointer; }
+.interior-furniture:hover { background: #769884; outline: 2px solid #fff; }
+.interior-player-cell { z-index: 2; }
+.interior-player { display: grid; place-items: center; width: 72%; height: 72%; border: 2px solid #fff; border-radius: 50%; background: #e4a45d; color: #26343b; box-shadow: 0 0 0 3px rgba(228,164,93,.35), 0 2px 8px rgba(0,0,0,.5); font-size: 12px; }
+.interior-player[data-direction="up"] { transform: translateY(-2px); }
+.interior-player[data-direction="down"] { transform: translateY(2px); }
+.interior-player[data-direction="left"] { transform: translateX(-2px); }
+.interior-player[data-direction="right"] { transform: translateX(2px); }
+.interior-message { min-height: 18px; margin: 10px 0 14px; color: #e4c18f; }
+@media (max-width: 520px) {
+  .interior-panel { padding: 13px; }
+  .interior-panel h2 { font-size: 20px; }
+  .interior-board { gap: 1px; padding: 4px; grid-template-rows: repeat(8, clamp(22px, 6vw, 31px)); }
+}
