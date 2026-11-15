@@ -268,17 +268,6 @@ export class Game {
     }
   }
 
-  private isInsideRing(x: number, z: number, ring: number[][]): boolean {
-    let inside = false;
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
-      const a = this.geographicToLocal(ring[i][0], ring[i][1]);
-      const b = this.geographicToLocal(ring[j][0], ring[j][1]);
-      if ((a[1] > z) !== (b[1] > z) &&
-        x < ((b[0] - a[0]) * (z - a[1])) / ((b[1] - a[1]) || 1e-9) + a[0]) inside = !inside;
-    }
-    return inside;
-  }
-
   private isInsideLocalRing(x: number, z: number, ring: [number, number][]): boolean {
     let inside = false;
     for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
