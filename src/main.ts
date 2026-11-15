@@ -660,6 +660,7 @@ function setLanguage(next: Language): void {
       element.textContent = translations[next][key as keyof typeof translations.en];
     }
   });
+  mapStatus.textContent = map.isStyleLoaded() ? translations[next].ready : translations[next].loading;
   searchInput.placeholder = translations[next].search;
   const saveNameInput = document.querySelector<HTMLInputElement>("#save-slot-name");
   if (saveNameInput) {
@@ -1511,7 +1512,7 @@ function closeBuildingInterior(): void {
 }
 
 function startGameMode(resumeSession: SavedGameSession | null = null): void {
-  if (!map.loaded()) {
+  if (!map.isStyleLoaded()) {
     showToast(language === "en" ? "The world map is still loading. Please wait a moment." : "La carte du monde est en cours de chargement. Patientez un instant.");
     return;
   }
@@ -1757,6 +1758,7 @@ map.on("load", () => {
 });
 
 map.on("style.load", () => {
+  mapStatus.textContent = translations[language].ready;
   ensureGameLayers();
   add3DBuildings();
   addPointsOfInterest();
@@ -1770,7 +1772,7 @@ map.on("error", (event) => {
 
 
 $("#home-play").addEventListener("click", () => {
-  if (!map.loaded()) {
+  if (!map.isStyleLoaded()) {
     showToast(language === "en" ? "The world map is still loading. Please wait a moment." : "La carte du monde est en cours de chargement. Patientez un instant.");
     return;
   }
@@ -2161,5 +2163,5 @@ setLanguage("en");
 map.on("load", () => $("#map-live-dot").classList.add("is-ready"));
 map.on("error", (event) => {
   if (event.error) console.warn("World map loading error:", event.error.message);
-  if (!map.loaded()) mapStatus.textContent = translations[language].mapError;
+  if (!map.isStyleLoaded()) mapStatus.textContent = translations[language].mapError;
 });
