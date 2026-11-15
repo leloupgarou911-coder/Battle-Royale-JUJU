@@ -93,3 +93,12 @@ A project license will be selected before public redistribution of source assets
 ## World map and game camera
 
 JUJU World uses the OpenFreeMap Liberty vector style with OpenStreetMap-based geographic data. The initial view is a global 2D Mercator map with a top-down camera. Use **TOP-DOWN GAME CAMERA** to return to the full-world view and reset the camera for the planned 2D game layer. Map coverage varies by country, city, neighbourhood, and zoom level; building and point-of-interest data are community-maintained and are not complete everywhere. JUJU does not use an Algeria-only dataset: it reads the same global map sources wherever their data is available. MapLibre loads the vector tiles needed for the visible viewport and updates them while the player moves; the game layer keeps a bounded cache of nearby procedural scenery. This avoids downloading the entire planet at once. It still requires an internet connection for map tiles, and coverage/latency vary by region. This is a real-world map foundation, not yet a complete playable battle-royale mode.
+
+## Local exploration history
+
+- Visited 750 m game-zone coordinates are saved locally in the browser using `localStorage`; no account or server upload is involved.
+- Up to 200 recently visited zones are retained. Revisiting a zone moves it to the newest position in the local history.
+- Previously visited zone outlines are restored on the game map after a refresh, and the HUD shows the number of saved zones.
+- The **Clear visited zones** control removes this local history. Clearing browser site data or using a different browser/device also removes or separates this history.
+- This stores exploration metadata only, not OpenStreetMap vector tiles, buildings, roads, or terrain. It does not provide offline map play; an internet connection is still required for map data.
+- Storage is best-effort: private browsing, browser settings, or a full/disabled storage quota may prevent saving.
