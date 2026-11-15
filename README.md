@@ -102,3 +102,11 @@ JUJU World uses the OpenFreeMap Liberty vector style with OpenStreetMap-based ge
 - The **Clear visited zones** control removes this local history. Clearing browser site data or using a different browser/device also removes or separates this history.
 - This stores exploration metadata only, not OpenStreetMap vector tiles, buildings, roads, or terrain. It does not provide offline map play; an internet connection is still required for map data.
 - Storage is best-effort: private browsing, browser settings, or a full/disabled storage quota may prevent saving.
+
+## Local game-session recovery
+
+- While game mode is active, the browser periodically saves the player's longitude/latitude, current 750 m zone, movement speed, zoom level, and save timestamp to `localStorage`.
+- On the next page load, a resume panel offers **Resume** (restore the saved position and speed) or **New exploration** (discard the session and start from the current map area).
+- Sessions older than 90 days or with invalid coordinates/settings are discarded. Saving is local to that browser and device; it is not synchronized between devices or uploaded to a server.
+- The session contains location coordinates. Anyone with access to this browser profile may be able to inspect or clear its site data. The existing **Clear visited zones** button clears the exploration history, not the separate session save.
+- This restores the player's session state only. It does not save downloaded map tiles or make the game playable offline.
