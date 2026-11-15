@@ -18,7 +18,8 @@
 - Progressive world streaming: MapLibre requests vector tiles for the visible area as the camera moves, across all countries.
 - Game-zone scenery cache: the active 750 m zone and eight neighbours are displayed, while a second ring is prepared and recent zone scenery is kept in a bounded cache.
 - Game HUD reports nearby map-tile loading and readiness instead of assuming every new area is instantly available.
-- Directional predictive scenery preloading: while moving, JUJU prepares procedural scenery in a short corridor ahead of the player, including adjacent side zones for turns.
+- Adaptive world-streaming manager: selects a tile-cache budget and procedural-zone cache from browser connection/device hints, protects the active neighbourhood, and evicts older distant scenery with an LRU policy.
+- Directional look-ahead: prepares procedural scenery ahead of the player and makes best-effort requests for a few real vector tiles through the map source TileJSON template; browser HTTP caching depends on the tile server response headers.
 
 ## Technology
 
@@ -59,7 +60,10 @@ npm run preview
 - Click a POI marker to view its mapped name and category.
 - The same POI categories work worldwide; what appears depends on the local OpenStreetMap/OpenMapTiles coverage.
 - In game mode, the map streams new vector tiles around the camera as the player moves. Nearby scenery is cached so revisiting recently explored zones is lighter.
-- While the player moves, the game predicts the current heading and warms the next three rows of procedural scenery ahead, without generating the whole world.
+- While moving, the game predicts the heading and warms a short procedural corridor (one, two, or three zones according to the device/network profile).
+- A small number of vector tiles ahead are requested best-effort from the OpenMapTiles source template. Browser caching depends on provider response headers; MapLibre still requests every tile required by the visible viewport normally.
+- On slower connections or devices, non-essential map details appear at closer zoom levels, while roads and buildings retain priority over POI labels and decorative land cover.
+- The vector-tile cache size is selected when the map starts. Network changes update procedural cache size, look-ahead depth, and detail thresholds; MapLibre manages eviction of its own tile cache.
 
 ## Deployment
 
@@ -73,7 +77,7 @@ In GitHub, open **Settings → Pages** and select **GitHub Actions** as the buil
 2. Better 3D city visualization and terrain.
 3. Select a pilot area after testing the map.
 4. Add game-ready zones and fictional interiors.
-5. Add predictive vector-tile viewport tests and tune tile/scenery cache limits for different devices and connection speeds.
+5. Add automated tests for TileJSON look-ahead, browser cache behavior, and adaptive streaming profiles; validate provider caching headers and tune for real devices/connections.
 6. Add multiplayer architecture after the exploration prototype is stable.
 
 ## Attribution and privacy
