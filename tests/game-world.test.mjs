@@ -94,3 +94,40 @@ test("movement handles the international date line and rejects invalid inputs", 
   assert.throws(() => destinationFromDirection({ lng: 0, lat: 0 }, { x: 1, y: 0 }, -1), RangeError);
   assert.equal(normalizeDirection({ x: 0, y: 0 }), null);
 });
+
+test("latitude-aware zones remain valid close to the poles and date line", () => {
+  for (const point of [{ lng: 179.999, lat: 89.99 }, { lng: -179.999, lat: -89.99 }, { lng: 180, lat: 0 }]) {
+    const zone = zoneFor(point.lng, point.lat);
+    const bounds = zoneBounds(zone.x, zone.y);
+    const [lng, lat] = spawnForZone(zone.x, zone.y);
+    assert.ok(lng >= bounds.west && lng <= bounds.east);
+    assert.ok(lat >= bounds.south && lat <= bounds.north);
+    assert.equal(zoneFor(lng, lat).key, zone.key);
+  }
+});
+
+test("building tags are classified into appropriate fictional interior templates", () => {
+  assert.equal(classifyBuilding({ building: "school" }), "school");
+  assert.equal(classifyBuilding({ building: "apartments" }), "apartment");
+  assert.equal(classifyBuilding({ shop: "supermarket" }), "shop");
+  assert.equal(classifyBuilding({ office: "company" }), "office");
+  assert.equal(classifyBuilding({ building: "warehouse" }), "industrial");
+  assert.equal(classifyBuilding({ building: "detached" }), "house");
+  assert.equal(classifyBuilding({ building: "yes" }), "other");
+  for (const kind of ["house", "apartment", "school", "shop", "office", "industrial", "other"]) {
+    const layout = createInteriorLayout(kind);
+    assert.ok(layout.objects.length > 0);
+    assert.ok(layout.doors.length > 0);
+    for (const item of layout.objects) {
+      assert.ok(item.x >= 0 && item.x < 12);
+      assert.ok(item.y >= 0 && item.y < 8);
+    }
+  }
+});
+
+test("interior layouts return independent copies", () => {
+  const first = createInteriorLayout("house");
+  const second = createInteriorLayout("house");
+  first.objects[0].x = 11;
+  assert.notEqual(second.objects[0].x, 11);
+});
