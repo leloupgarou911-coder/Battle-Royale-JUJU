@@ -197,8 +197,17 @@
           <button type="button" data-move="up" data-i18n-aria="moveUpAria" aria-label="Move up">▲</button>
           <div><button type="button" data-move="left" data-i18n-aria="moveLeftAria" aria-label="Move left">◀</button><button type="button" data-move="down" data-i18n-aria="moveDownAria" aria-label="Move down">▼</button><button type="button" data-move="right" data-i18n-aria="moveRightAria" aria-label="Move right">▶</button></div>
         </div>
-        <div class="game-hud-actions"><button id="game-main-menu" type="button" data-i18n="mainMenuLabel">MAIN MENU</button><button id="game-zone-reload" type="button" data-i18n="loadZone">RELOAD CURRENT ZONE</button><button id="game-mode-toggle" type="button" data-i18n="enterGame">ENTER GAME MODE</button></div>
+        <div class="game-hud-actions"><button id="game-main-menu" type="button" data-i18n="mainMenuLabel">MAIN MENU</button><button id="game-zone-reload" type="button" data-i18n="loadZone">RELOAD CURRENT ZONE</button><button id="game-mode-toggle" type="button" data-i18n="enterGame">ENTER GAME MODE</button>
+          <button id="game-3d-toggle" type="button">ENTER 3D PROTOTYPE</button></div>
         <button id="game-clear-explored" class="game-clear-explored" type="button" data-i18n="clearExplored">CLEAR VISITED ZONES</button>
+      </section>
+      <section id="game-3d-overlay" class="game-3d-overlay" hidden aria-label="JUJU WORLD 3D prototype">
+        <header class="game-3d-toolbar">
+          <div><strong>JUJU WORLD · 3D PROTOTYPE</strong><span>Fictional test environment — not yet connected to real map geometry</span></div>
+          <button id="game-3d-exit" type="button">BACK TO MAP</button>
+        </header>
+        <div id="game-3d-canvas" class="game-3d-canvas"></div>
+        <div class="game-3d-help">WASD / ZQSD to move · Mouse to look · Click the scene to capture the pointer</div>
       </section>
       <div class="map-hint"><span class="hint-icon">⌖</span><span data-i18n="hint">Drag to move · Scroll to zoom · Right-click to tilt</span></div>
       <div id="toast" class="toast" role="status"></div>
