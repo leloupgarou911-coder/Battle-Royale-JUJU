@@ -4,6 +4,7 @@ import "./style.css";
 import { createZoneObstacles, legacyMercatorZoneCenter, spawnForZone, zoneAtOffset, zoneFor, zonePolygon } from "./game/zones.ts";
 import { destinationFromDirection, haversineDistance, normalizeDirection } from "./game/movement.ts";
 import { classifyBuilding, createInteriorLayout, type BuildingKind, type InteriorDoor, type InteriorObject } from "./game/interiors.ts";
+import { applyDailyMissionProgress, emptyProgress, ensureDailyMissions as ensureProgressDailyMissions, normalizeProgress, recordDiscoveredCity, recordDiscoveredZone, recordTravelDistance, type DailyMission, type DailyMissionState, type MissionHistoryEntry, type PlayerProgress } from "./game/progression.ts";
 
 type Language = "en" | "fr";
 
@@ -335,39 +336,24 @@ interface SavedGameSession {
   zoom: number;
   savedAt: number;
 }
-interface PlayerProgress { xp:number; distanceMeters:number; remainder:number; zones:string[]; cities:string[]; achievements:string[] }
-interface DailyMission { id:string; progress:number; target:number; rewardXp:number; completedAt:number | null }
-interface DailyMissionState { date:string; missions:DailyMission[] }
-interface MissionHistoryEntry { id:string; date:string; completedAt:number; rewardXp:number }
 interface SavedGameSlot {
   id:string; name:string; session:SavedGameSession; progress:PlayerProgress;
   dailyMissions?:DailyMissionState; missionHistory?:MissionHistoryEntry[];
   createdAt:number; updatedAt:number;
 }
-const emptyProgress=():PlayerProgress=>({xp:0,distanceMeters:0,remainder:0,zones:[],cities:[],achievements:[]});
 const localDateKey=():string=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");};
-const createDailyMissionState=():DailyMissionState=>({date:localDateKey(),missions:[
- {id:"zones",progress:0,target:3,rewardXp:75,completedAt:null},
- {id:"city",progress:0,target:1,rewardXp:100,completedAt:null},
- {id:"distance",progress:0,target:1000,rewardXp:100,completedAt:null},
-]});
 function ensureDailyMissions(slot:SavedGameSlot):DailyMissionState {
- if(!slot.dailyMissions||slot.dailyMissions.date!==localDateKey())slot.dailyMissions=createDailyMissionState();
- return slot.dailyMissions;
+ return ensureProgressDailyMissions(slot, localDateKey());
 }
 function missionLabel(id:string):string {
  const labels:Record<string,[string,string]>={zones:["Explore 3 new zones","Explorer 3 nouvelles zones"],city:["Discover a new city","Découvrir une nouvelle ville"],distance:["Travel 1,000 metres","Parcourir 1 000 mètres"]};
  return labels[id]?.[language==="en"?0:1]??id;
 }
 function updateDailyMission(slot:SavedGameSlot,id:string,amount:number):boolean {
- const state=ensureDailyMissions(slot),mission=state.missions.find(item=>item.id===id);
- if(!mission||mission.completedAt||amount<=0)return false;
- mission.progress=Math.min(mission.target,mission.progress+amount);
- if(mission.progress<mission.target)return false;
- mission.completedAt=Date.now();slot.progress.xp+=mission.rewardXp;
- slot.missionHistory=[...(slot.missionHistory??[]),{id,date:state.date,completedAt:mission.completedAt,rewardXp:mission.rewardXp}].slice(-100);
+ const result=applyDailyMissionProgress(slot,id,amount,localDateKey(),Date.now());
+ if(!result.completed)return false;
  checkAchievements(slot.progress);
- showToast(language==="fr"?`Mission terminée : ${missionLabel(id)} · +${mission.rewardXp} XP`:`Mission complete: ${missionLabel(id)} · +${mission.rewardXp} XP`);
+ showToast(language==="fr"?`Mission terminée : ${missionLabel(id)} · +${result.rewardXp} XP`:`Mission complete: ${missionLabel(id)} · +${result.rewardXp} XP`);
  return true;
 }
 const achievementDefs=[
@@ -379,27 +365,24 @@ const achievementDefs=[
  {id:"km10",en:"Long-Distance Explorer",fr:"Grand explorateur",rewardEn:"Veteran badge",rewardFr:"Badge vétéran",test:(p:PlayerProgress)=>p.distanceMeters>=10000},
  {id:"xp500",en:"Rising Explorer",fr:"Explorateur confirmé",rewardEn:"500 XP milestone",rewardFr:"Palier des 500 XP",test:(p:PlayerProgress)=>p.xp>=500},
 ];
-function normalizeProgress(v:unknown):PlayerProgress {
- if(!v||typeof v!=="object")return emptyProgress();const p=v as Partial<PlayerProgress>;
- return {xp:Number.isFinite(p.xp)?Math.max(0,Math.floor(p.xp!)):0,distanceMeters:Number.isFinite(p.distanceMeters)?Math.max(0,p.distanceMeters!):0,remainder:Number.isFinite(p.remainder)?Math.max(0,Math.min(24.999,p.remainder!)):0,zones:Array.isArray(p.zones)?p.zones.filter((x):x is string=>typeof x==="string").slice(-1000):[],cities:Array.isArray(p.cities)?p.cities.filter((x):x is string=>typeof x==="string").slice(-200):[],achievements:Array.isArray(p.achievements)?p.achievements.filter((x):x is string=>typeof x==="string"):[]};
-}
+
 function activeSlot():SavedGameSlot|undefined{return savedGameSlots.find(x=>x.id===activeSaveSlotId);}
 function checkAchievements(p:PlayerProgress):void {
  achievementDefs.forEach(a=>{if(!p.achievements.includes(a.id)&&a.test(p)){p.achievements.push(a.id);showToast(language==="fr"?`Succès débloqué : ${a.fr} · ${a.rewardFr}`:`Achievement unlocked: ${a.en} · ${a.rewardEn}`);}});
 }
 function saveProgress():void {const slot=activeSlot();if(!slot)return;slot.updatedAt=Date.now();persistSavedGameSlots();renderSavedGameSlots();renderPlayerProgress();renderDailyMissions();}
 function discoverProgressZone(x:number,y:number):void {
- const slot=activeSlot();if(!slot)return;const key=`${x}:${y}`;if(slot.progress.zones.includes(key))return;
- slot.progress.zones.push(key);if(slot.progress.zones.length>1000)slot.progress.zones.shift();slot.progress.xp+=25;updateDailyMission(slot,"zones",1);checkAchievements(slot.progress);saveProgress();
+ const slot=activeSlot();if(!slot||!recordDiscoveredZone(slot.progress,x,y))return;
+ updateDailyMission(slot,"zones",1);checkAchievements(slot.progress);saveProgress();
 }
 function discoverProgressCity(name:string,country?:string):void {
- const slot=activeSlot();if(!slot)return;const key=`${name.trim().toLocaleLowerCase()}|${(country??"").trim().toLocaleLowerCase()}`;if(!name.trim()||slot.progress.cities.includes(key))return;
- slot.progress.cities.push(key);if(slot.progress.cities.length>200)slot.progress.cities.shift();slot.progress.xp+=50;updateDailyMission(slot,"city",1);checkAchievements(slot.progress);saveProgress();
+ const slot=activeSlot();if(!slot||!recordDiscoveredCity(slot.progress,name,country))return;
+ updateDailyMission(slot,"city",1);checkAchievements(slot.progress);saveProgress();
 }
 function addTravelDistance(from:maplibregl.LngLat,to:maplibregl.LngLat):void {
- const slot=activeSlot();if(!slot)return;const meters=haversineDistance(from,to);if(!Number.isFinite(meters)||meters<=0||meters>100)return;
- slot.progress.distanceMeters+=meters;const total=slot.progress.remainder+meters;const xp=Math.floor(total/25);slot.progress.remainder=total-xp*25;if(xp>0)slot.progress.xp+=xp;
- updateDailyMission(slot,"distance",meters);checkAchievements(slot.progress);if(xp>0)saveProgress();
+ const slot=activeSlot();if(!slot)return;const meters=haversineDistance(from,to);const earnedXp=recordTravelDistance(slot.progress,meters);
+ if(earnedXp===0&&(!Number.isFinite(meters)||meters<=0||meters>100))return;
+ updateDailyMission(slot,"distance",meters);checkAchievements(slot.progress);if(earnedXp>0)saveProgress();
 }
 function renderDailyMissions():void {
  const slot=activeSlot(),list=document.querySelector<HTMLElement>("#daily-missions-list"),history=document.querySelector<HTMLElement>("#mission-history");
