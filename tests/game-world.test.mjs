@@ -15,6 +15,8 @@ import {
   normalizeDirection,
 } from "../src/game/movement.ts";
 import { classifyBuilding, createInteriorLayout } from "../src/game/interiors.ts";
+import { applyDailyMissionProgress, createDailyMissionState, emptyProgress, normalizeProgress, recordDiscoveredCity, recordDiscoveredZone, recordTravelDistance } from "../src/game/progression.ts";
+s.replace;
 
 test("zone centres map back to their own zone at the equator and higher latitudes", () => {
   for (const latitude of [0, 35, 60, 80, -35, -60, -80]) {
@@ -131,4 +133,72 @@ test("interior layouts return independent copies", () => {
   const second = createInteriorLayout("house");
   first.objects[0].x = 11;
   assert.notEqual(second.objects[0].x, 11);
+});
+
+test("saved player progress is normalized and bounded", () => {
+  const normalized = normalizeProgress({
+    xp: -5,
+    distanceMeters: 1200,
+    remainder: 40,
+    zones: Array.from({ length: 1005 }, (_, index) => String(index)),
+    cities: Array.from({ length: 205 }, (_, index) => String(index)),
+    achievements: ["first", 12, "second"],
+  });
+  assert.equal(normalized.xp, 0);
+  assert.equal(normalized.remainder, 24.999);
+  assert.equal(normalized.zones.length, 1000);
+  assert.equal(normalized.cities.length, 200);
+  assert.deepEqual(normalized.achievements, ["first", "second"]);
+});
+
+test("zone and city discovery award XP once only", () => {
+  const progress = emptyProgress();
+  assert.equal(recordDiscoveredZone(progress, 2, 3), true);
+  assert.equal(recordDiscoveredZone(progress, 2, 3), false);
+  assert.equal(recordDiscoveredCity(progress, "Oran", "Algeria"), true);
+  assert.equal(recordDiscoveredCity(progress, " oran ", " algeria "), false);
+  assert.equal(progress.xp, 75);
+});
+
+test("travel XP carries distance remainder without losing fractions", () => {
+  const progress = emptyProgress();
+  assert.equal(recordTravelDistance(progress, 12.5), 0);
+  assert.equal(recordTravelDistance(progress, 12.5), 1);
+  assert.equal(progress.xp, 1);
+  assert.equal(progress.remainder, 0);
+  assert.equal(progress.distanceMeters, 25);
+});
+
+test("daily missions reset on a new date and grant rewards only once", () => {
+  const slot = { progress: emptyProgress(), dailyMissions: createDailyMissionState("2026-11-15") };
+  const first = applyDailyMissionProgress(slot, "zones", 2, "2026-11-15", 1000);
+  assert.deepEqual(first, { completed: false, rewardXp: 0 });
+  const completed = applyDailyMissionProgress(slot, "zones", 1, "2026-11-15", 2000);
+  assert.deepEqual(completed, { completed: true, rewardXp: 75 });
+  const repeated = applyDailyMissionProgress(slot, "zones", 3, "2026-11-15", 3000);
+  assert.deepEqual(repeated, { completed: false, rewardXp: 0 });
+  assert.equal(slot.progress.xp, 75);
+  assert.equal(slot.missionHistory.length, 1);
+  applyDailyMissionProgress(slot, "zones", 1, "2026-11-16", 4000);
+  assert.equal(slot.dailyMissions.date, "2026-11-16");
+  assert.equal(slot.dailyMissions.missions[0].progress, 1);
+});
+
+test("mission progress rejects invalid or negative increments", () => {
+  const slot = { progress: emptyProgress() };
+  assert.equal(applyDailyMissionProgress(slot, "distance", -10, "2026-11-15", 1000).completed, false);
+  assert.equal(applyDailyMissionProgress(slot, "unknown", 10, "2026-11-15", 1000).completed, false);
+  assert.equal(slot.progress.xp, 0);
+});
+
+test("saved sessions reject invalid coordinates, corrupt settings and stale timestamps", async () => {
+  const { isValidGameSession, SESSION_MAX_AGE_MS } = await import("../src/game/saves.ts");
+  const now = 2_000_000_000_000;
+  const valid = { lng: 3.05, lat: 36.75, zoneX: 12, zoneY: 20, movementSpeed: 4.5, zoom: 16, savedAt: now - 1000 };
+  assert.equal(isValidGameSession(valid, now), true);
+  assert.equal(isValidGameSession({ ...valid, lng: 181 }, now), false);
+  assert.equal(isValidGameSession({ ...valid, movementSpeed: -1 }, now), false);
+  assert.equal(isValidGameSession({ ...valid, zoom: 30 }, now), false);
+  assert.equal(isValidGameSession({ ...valid, savedAt: now - SESSION_MAX_AGE_MS - 1 }, now), false);
+  assert.equal(isValidGameSession({ ...valid, savedAt: now + 1 }, now), false);
 });
