@@ -14,6 +14,7 @@ import { detectStreamingProfile, type NetworkInformationLike, type StreamingProf
 import { circlesOverlap, collisionSampleOffsets } from "./game/collisions.ts";
 
 import { translations, type Language } from "./i18n/translations.ts";
+import { Game } from "./game/Game.ts";
 
 const $ = <T extends HTMLElement>(selector: string): T => {
   const element = document.querySelector<T>(selector);
@@ -2167,4 +2168,45 @@ map.on("load", () => $("#map-live-dot").classList.add("is-ready"));
 map.on("error", (event) => {
   if (event.error) console.warn("World map loading error:", event.error.message);
   if (!map.isStyleLoaded()) mapStatus.textContent = translations[language].mapError;
+});
+
+
+// Three.js is currently an isolated prototype scene. It deliberately does not pretend
+// that its fictional buildings are extracted from the real OpenStreetMap geometry.
+let activeThreeGame: Game | null = null;
+const game3dButton = document.querySelector<HTMLButtonElement>("#game-3d-toggle");
+const game3dOverlay = document.querySelector<HTMLElement>("#game-3d-overlay");
+const game3dContainer = document.querySelector<HTMLElement>("#game-3d-canvas");
+const game3dExit = document.querySelector<HTMLButtonElement>("#game-3d-exit");
+
+function leaveThreeDimensionalPrototype(): void {
+  activeThreeGame?.dispose();
+  activeThreeGame = null;
+  if (game3dOverlay) game3dOverlay.hidden = true;
+  if (gameMode) return;
+  startGameMode(activeSlot()?.session ?? null);
+}
+
+game3dButton?.addEventListener("click", () => {
+  if (!gameMode || !game3dOverlay || !game3dContainer) return;
+  stopGameMode();
+  game3dOverlay.hidden = false;
+  try {
+    activeThreeGame?.dispose();
+    activeThreeGame = new Game(game3dContainer, (x, z) => {
+      const readout = document.querySelector<HTMLElement>("#game-3d-position");
+      if (readout) readout.textContent = `LOCAL 3D POSITION · ${x.toFixed(1)} / ${z.toFixed(1)} m`;
+    });
+    activeThreeGame.start();
+  } catch (error) {
+    console.error("Could not start the Three.js prototype:", error);
+    game3dOverlay.hidden = true;
+    showToast(language === "fr" ? "Le prototype 3D n'a pas pu démarrer sur cet appareil." : "The 3D prototype could not start on this device.");
+    startGameMode(activeSlot()?.session ?? null);
+  }
+});
+game3dExit?.addEventListener("click", leaveThreeDimensionalPrototype);
+window.addEventListener("pagehide", () => {
+  activeThreeGame?.dispose();
+  activeThreeGame = null;
 });
