@@ -5,6 +5,7 @@ import { createZoneObstacles, legacyMercatorZoneCenter, spawnForZone, zoneAtOffs
 import { destinationFromDirection, haversineDistance, normalizeDirection } from "./game/movement.ts";
 import { classifyBuilding, createInteriorLayout, type BuildingKind, type InteriorDoor, type InteriorObject } from "./game/interiors.ts";
 import { applyDailyMissionProgress, emptyProgress, ensureDailyMissions as ensureProgressDailyMissions, normalizeProgress, recordDiscoveredCity, recordDiscoveredZone, recordTravelDistance, type DailyMission, type DailyMissionState, type MissionHistoryEntry, type PlayerProgress } from "./game/progression.ts";
+import { isValidGameSession, type SavedGameSession } from "./game/saves.ts";
 
 type Language = "en" | "fr";
 
@@ -325,17 +326,7 @@ const EXPLORED_STORAGE_KEY = "juju-world-explored-zones-v2";
 const LEGACY_EXPLORED_STORAGE_KEY = "juju-world-explored-zones-v1";
 const SESSION_STORAGE_KEY = "juju-world-session-v1";
 const SAVE_SLOTS_STORAGE_KEY = "juju-world-save-slots-v1";
-const SESSION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 const SAVE_SLOT_LIMIT = 10;
-interface SavedGameSession {
-  lng: number;
-  lat: number;
-  zoneX: number;
-  zoneY: number;
-  movementSpeed: number;
-  zoom: number;
-  savedAt: number;
-}
 interface SavedGameSlot {
   id:string; name:string; session:SavedGameSession; progress:PlayerProgress;
   dailyMissions?:DailyMissionState; missionHistory?:MissionHistoryEntry[];
@@ -415,16 +406,6 @@ function renderPlayerProgress():void {
 let savedGameSlots: SavedGameSlot[] = [];
 let activeSaveSlotId: string | null = null;
 let lastSessionSaveAt = 0;
-function validGameSession(value: unknown): value is SavedGameSession {
-  if (!value || typeof value !== "object") return false;
-  const session = value as Partial<SavedGameSession>;
-  return Number.isFinite(session.lng) && (session.lng as number) >= -180 && (session.lng as number) <= 180
-    && Number.isFinite(session.lat) && (session.lat as number) >= -85.051129 && (session.lat as number) <= 85.051129
-    && Number.isInteger(session.zoneX) && Number.isInteger(session.zoneY)
-    && Number.isFinite(session.movementSpeed) && Number.isFinite(session.zoom)
-    && Number.isFinite(session.savedAt) && (session.savedAt as number) <= Date.now()
-    && Date.now() - (session.savedAt as number) <= SESSION_MAX_AGE_MS;
-}
 function loadSavedGameSlots(): void {
   try {
     const raw = localStorage.getItem(SAVE_SLOTS_STORAGE_KEY);
@@ -433,7 +414,7 @@ function loadSavedGameSlots(): void {
       if (Array.isArray(parsed)) {
         savedGameSlots = parsed.filter((item): item is SavedGameSlot =>
           !!item && typeof item.id === "string" && typeof item.name === "string"
-          && validGameSession(item.session) && Number.isFinite(item.createdAt)
+          && isValidGameSession(item.session) && Number.isFinite(item.createdAt)
           && Number.isFinite(item.updatedAt)
         ).map((item) => ({
           ...item,
@@ -452,7 +433,7 @@ function loadSavedGameSlots(): void {
       const legacyRaw = localStorage.getItem(SESSION_STORAGE_KEY);
       if (legacyRaw) {
         const legacy: unknown = JSON.parse(legacyRaw);
-        if (validGameSession(legacy)) {
+        if (isValidGameSession(legacy)) {
           const now = Date.now();
           savedGameSlots = [{
             id: "legacy-" + now,
