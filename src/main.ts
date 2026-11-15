@@ -2087,6 +2087,7 @@ function setGameCamera(): void {
     return;
   }
   startGameMode();
+  if (!gameMode) return;
   map.setProjection({ type: "mercator" });
   $("#flat-view").classList.add("active");
   $("#globe-view").classList.remove("active");
@@ -2284,6 +2285,10 @@ speedControl.addEventListener("input", () => {
 $("#game-clear-explored").addEventListener("click", clearExploredZones);
 $("#save-slot-create").addEventListener("click", createNamedSaveSlot);
 $("#resume-session-new").addEventListener("click", () => {
+  if (savedGameSlots.length >= SAVE_SLOT_LIMIT) {
+    showToast(translations[language].saveLimit);
+    return;
+  }
   clearActiveSaveSlot();
   const panel = document.querySelector<HTMLElement>("#resume-session");
   if (panel) panel.hidden = true;
