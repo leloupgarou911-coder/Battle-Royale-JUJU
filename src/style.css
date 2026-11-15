@@ -169,3 +169,14 @@ h1 span { color: var(--gold); }
 .juju-player.is-moving::after { animation: juju-step .18s ease-in-out infinite alternate; }
 @keyframes juju-walk { from { transform: translateY(0) rotate(-5deg); } to { transform: translateY(-3px) rotate(5deg); } }
 @keyframes juju-step { from { transform: scaleX(.82); } to { transform: scaleX(1.08); } }
+
+
+.game-touch-controls { display: none; margin: 8px 0 12px; align-items: center; flex-direction: column; gap: 4px; }
+.game-touch-controls > div { display: flex; gap: 4px; }
+.game-touch-controls button {
+  width: 36px; height: 32px; border: 1px solid rgba(228,183,127,.45); border-radius: 5px;
+  background: rgba(228,183,127,.12); color: #f5f0e8; font-size: 12px; cursor: pointer;
+  touch-action: manipulation;
+}
+.game-touch-controls button:active { background: rgba(228,183,127,.35); }
+@media (pointer: coarse) { .game-mode .game-touch-controls { display: flex; } }
