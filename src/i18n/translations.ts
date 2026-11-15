@@ -11,7 +11,7 @@ export const translations = {
     game3dTitle: "JUJU WORLD · 3D PROTOTYPE",
     game3dDescription: "Prototype 3D · mapped building footprints where available; terrain and roads are still simplified",
     game3dExit: "BACK TO MAP",
-    game3dHelp: "WASD / ZQSD to move · Mouse to look · Click the scene to capture the pointer",
+    game3dHelp: "WASD / ZQSD to move · SPACE to jump · Mouse to look · Scroll to zoom camera",
     enterGame: "ENTER GAME MODE",
     exitGame: "EXIT GAME MODE",
     loadZone: "RELOAD CURRENT ZONE",
