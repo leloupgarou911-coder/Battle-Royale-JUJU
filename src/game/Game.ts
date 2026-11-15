@@ -81,6 +81,7 @@ export class Game {
     );
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
+    ground.name = "procedural-ground";
     this.scene.add(ground);
 
     if (this.worldData.roads.length === 0) {
@@ -149,6 +150,11 @@ export class Game {
     const { terrain, terrainSegments, terrainSize } = this.worldData;
     const expected = (terrainSegments + 1) * (terrainSegments + 1);
     if (terrain.length !== expected || terrainSegments < 1) return;
+    const baseGround = this.scene.getObjectByName("procedural-ground");
+    if (baseGround) {
+      this.scene.remove(baseGround);
+      if (baseGround instanceof THREE.Mesh) baseGround.geometry.dispose();
+    }
     const positions: number[] = [];
     const uvs: number[] = [];
     const indices: number[] = [];
