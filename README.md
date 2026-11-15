@@ -72,3 +72,7 @@ The project will not attempt to reproduce private home interiors. Any future geo
 ## License
 
 A project license will be selected before public redistribution of source assets or third-party resources.
+
+## World map and game camera
+
+JUJU World uses the OpenFreeMap Liberty vector style with OpenStreetMap-based geographic data. The initial view is a global 2D Mercator map with a top-down camera. Use **TOP-DOWN GAME CAMERA** to return to the full-world view and reset the camera for the planned 2D game layer. Map coverage varies by region and zoom level; building and point-of-interest data are not complete everywhere. This is a real-world map foundation, not yet a playable battle-royale mode.
