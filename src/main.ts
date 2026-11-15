@@ -37,6 +37,7 @@ let virtualEntranceMarker: maplibregl.Marker | null = null;
 let selectedBuildingName = "";
 let selectedBuildingType: BuildingKind = "other";
 let selectedBuildingLevels: number | null = null;
+let currentInteriorFloor = 0;
 let activeZoneKey = "";
 let interiorPosition = { x: 2, y: 4 };
 let interiorLastDirection = "down";
@@ -1343,11 +1344,44 @@ function createInteriorForBuilding(kind: BuildingKind): void {
   const layout = createInteriorLayout(kind);
   interiorObjects = layout.objects;
   interiorDoors = layout.doors;
+  refreshInteriorStairs();
+}
+
+function refreshInteriorStairs(): void {
+  interiorObjects = interiorObjects.filter((item) => !item.id.startsWith("stairs-"));
+  if (!selectedBuildingLevels || selectedBuildingLevels <= 1) return;
+  if (currentInteriorFloor < selectedBuildingLevels - 1) {
+    interiorObjects.push({ id: "stairs-up", x: 10, y: 2, label: "interiorStairsUp", glyph: "↗" });
+  }
+  if (currentInteriorFloor > 0) {
+    interiorObjects.push({ id: "stairs-down", x: 10, y: 5, label: "interiorStairsDown", glyph: "↙" });
+  }
+}
+
+function changeInteriorFloor(direction: -1 | 1): void {
+  if (!selectedBuildingLevels || selectedBuildingLevels <= 1) return;
+  const nextFloor = currentInteriorFloor + direction;
+  if (nextFloor < 0 || nextFloor >= selectedBuildingLevels) {
+    $("#interior-message").textContent = translations[language].floorBoundaryHint;
+    return;
+  }
+  currentInteriorFloor = nextFloor;
+  interiorPosition = direction > 0 ? { x: 9, y: 2 } : { x: 9, y: 5 };
+  refreshInteriorStairs();
+  renderInterior();
+  $("#interior-message").textContent = `${translations[language].floorLabel} ${currentInteriorFloor + 1} / ${selectedBuildingLevels}`;
 }
 
 function interiorCellKey(x: number, y: number): string { return `${x},${y}`; }
 
 function renderInterior(): void {
+  const floorControls = $("#interior-floor-controls");
+  floorControls.hidden = !selectedBuildingLevels || selectedBuildingLevels <= 1;
+  $("#interior-floor-label").textContent = selectedBuildingLevels && selectedBuildingLevels > 1
+    ? `${translations[language].floorLabel} ${currentInteriorFloor + 1} / ${selectedBuildingLevels}`
+    : translations[language].floorLabel;
+  $("#interior-floor-down").toggleAttribute("disabled", currentInteriorFloor <= 0);
+  $("#interior-floor-up").toggleAttribute("disabled", !selectedBuildingLevels || currentInteriorFloor >= selectedBuildingLevels - 1);
   const board = $("#interior-board");
   board.replaceChildren();
   const objectAt = new Map(interiorObjects.map((item) => [interiorCellKey(item.x, item.y), item]));
@@ -1413,6 +1447,8 @@ function interiorRoomForPosition(): string {
 }
 
 function inspectInteriorObject(id: string): void {
+  if (id === "stairs-up") { changeInteriorFloor(1); return; }
+  if (id === "stairs-down") { changeInteriorFloor(-1); return; }
   const item = interiorObjects.find((object) => object.id === id);
   if (!item) return;
   interiorLastMessage = `${translations[language].interiorObjectHint} : ${translations[language][item.label as keyof typeof translations.en]}`;
@@ -1453,6 +1489,7 @@ function openBuildingInterior(): void {
   stopMovementLoop();
   heldDirections.clear();
   interiorPosition = { x: 2, y: 4 };
+  currentInteriorFloor = 0;
   interiorLastDirection = "down";
   $("#interior-building-name").textContent = selectedBuildingName || buildingTypeLabel(selectedBuildingType);
   $("#interior-title").textContent = `${buildingTypeLabel(selectedBuildingType)} · ${translations[language].interiorTitle}`;
@@ -1788,6 +1825,8 @@ $("#game-main-menu").addEventListener("click", () => {
   if (home) home.hidden = false;
 });
 $("#interior-exit").addEventListener("click", closeBuildingInterior);
+$("#interior-floor-up").addEventListener("click", () => changeInteriorFloor(1));
+$("#interior-floor-down").addEventListener("click", () => changeInteriorFloor(-1));
 $("#building-interior").addEventListener("click", (event) => {
   if (event.target === $("#building-interior")) closeBuildingInterior();
 });
