@@ -94,15 +94,18 @@ let selectedPlaceMarker: maplibregl.Marker | null = null;
 const map: MapLibreMap = new maplibregl.Map({
   container: "map",
   style: "https://tiles.openfreemap.org/styles/liberty",
-  center: [2.5, 28],
-  zoom: 3.7,
+  center: [0, 20],
+  zoom: 2.1,
   minZoom: 1.5,
   maxZoom: 19,
-  pitch: 18,
-  bearing: -8,
+  pitch: 0,
+  bearing: 0,
   maxPitch: 75,
   attributionControl: false,
-  renderWorldCopies: false,
+  renderWorldCopies: true,
+  dragRotate: false,
+  pitchWithRotate: false,
+  touchPitch: false,
 });
 
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
@@ -155,8 +158,8 @@ function selectPlace(place: PlaceResult): void {
   map.flyTo({
     center: [place.longitude, place.latitude],
     zoom: 16,
-    pitch: 58,
-    bearing: -18,
+    pitch: 0,
+    bearing: 0,
     duration: 1900,
     essential: true,
   });
@@ -332,11 +335,10 @@ function setMapView(view: "flat" | "globe"): void {
 
 map.on("load", () => {
   mapStatus.textContent = translations[language].ready;
-  try {
-    map.setProjection({ type: "globe" });
-  } catch {
-    // Older browser/GPU combinations can still use the standard 2D map.
-  }
+  map.setProjection({ type: "mercator" });
+  map.easeTo({ pitch: 0, bearing: 0, duration: 0 });
+  $("#flat-view").classList.add("active");
+  $("#globe-view").classList.remove("active");
   add3DBuildings();
   addPointsOfInterest();
 });
@@ -358,11 +360,11 @@ $("#place-card-close").addEventListener("click", () => {
 });
 
 $("#place-card-streets").addEventListener("click", () => {
-  map.easeTo({ zoom: 17, pitch: 62, duration: 900 });
+  map.easeTo({ zoom: 17, pitch: 0, bearing: 0, duration: 900 });
 });
 
 $("#place-card-overview").addEventListener("click", () => {
-  map.easeTo({ zoom: 12, pitch: 35, duration: 900 });
+  map.easeTo({ zoom: 12, pitch: 0, bearing: 0, duration: 900 });
 });
 
 $("#language-toggle").addEventListener("click", () => {
