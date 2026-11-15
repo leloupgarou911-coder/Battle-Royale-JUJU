@@ -499,6 +499,16 @@ function ensureGameLayers(): void {
   }
 }
 
+function setGameWorldVisibility(visible: boolean): void {
+  const visibility = visible ? "visible" : "none";
+  [
+    "juju-zone-fill", "juju-zone-outline", "juju-zone-rocks",
+    "juju-zone-trees", "juju-zone-spawn-marker",
+  ].forEach((id) => {
+    if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visibility);
+  });
+}
+
 function updateGameZone(lng: number, lat: number): void {
   const zone = zoneFor(lng, lat);
   if (zone.key === activeZoneKey) return;
@@ -529,22 +539,21 @@ function updateGameHud(): void {
 }
 
 function isBuildingCollision(lng: number, lat: number): boolean {
-  if (!map.getLayer("juju-collision-buildings") || map.getZoom() < 15) return false;
   const point = map.project([lng, lat]);
-  const radius = 7;
-  const samples: [number, number][] = [
-    [0, 0], [radius, 0], [-radius, 0], [0, radius], [0, -radius],
-  ];
-  const buildingHit = samples.some(([dx, dy]) => map.queryRenderedFeatures(
-    [point.x + dx, point.y + dy],
-    { layers: ["juju-collision-buildings"] },
-  ).length > 0);
-  if (buildingHit) return true;
-  const obstacleSource = map.getSource("juju-zone-obstacles") as maplibregl.GeoJSONSource | undefined;
-  if (!obstacleSource) return false;
+  if (map.getLayer("juju-collision-buildings") && map.getZoom() >= 15) {
+    const radius = 7;
+    const samples: [number, number][] = [
+      [0, 0], [radius, 0], [-radius, 0], [0, radius], [0, -radius],
+    ];
+    const buildingHit = samples.some(([dx, dy]) => map.queryRenderedFeatures(
+      [point.x + dx, point.y + dy],
+      { layers: ["juju-collision-buildings"] },
+    ).length > 0);
+    if (buildingHit) return true;
+  }
+  // Procedural trees and rocks must collide at every game zoom level.
   const zone = zoneFor(lng, lat);
-  const features = createZoneObstacles(zone.x, zone.y).features;
-  return features.some((feature) => {
+  return createZoneObstacles(zone.x, zone.y).features.some((feature) => {
     const obstaclePoint = map.project(feature.geometry.coordinates as [number, number]);
     const radius = feature.properties?.kind === "tree" ? 17 : 13;
     return Math.hypot(obstaclePoint.x - point.x, obstaclePoint.y - point.y) < radius;
@@ -564,6 +573,7 @@ function startGameMode(): void {
   const spawnCoordinates = spawnForZone(currentZone.x, currentZone.y);
   const spawn = new maplibregl.LngLat(spawnCoordinates[0], spawnCoordinates[1]);
   ensureGameLayers();
+  setGameWorldVisibility(true);
   updateGameZone(spawn.lng, spawn.lat);
   const player = document.createElement("div");
   player.className = "juju-player";
@@ -588,6 +598,7 @@ function startGameMode(): void {
 
 function stopGameMode(): void {
   gameMode = false;
+  setGameWorldVisibility(false);
   playerMarker?.remove();
   playerMarker = null;
   $("#app").classList.remove("game-mode");
