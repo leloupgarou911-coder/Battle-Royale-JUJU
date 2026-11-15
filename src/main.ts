@@ -2203,9 +2203,8 @@ game3dButton?.addEventListener("click", () => {
   if (!gameMode || !game3dOverlay || !game3dContainer) return;
   const origin = map.getCenter();
   const mappedBuildings = map.querySourceFeatures("openmaptiles", { sourceLayer: "building" })
-    .filter((feature): feature is GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> =>
-      feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon")
-    .slice(0, 350) as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
+    .filter((feature) => feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon")
+    .slice(0, 350) as unknown as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
   const uniqueBuildings = new Map<string, GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>>();
   mappedBuildings.forEach((feature) => {
     const key = String(feature.id ?? JSON.stringify(feature.geometry.coordinates));
