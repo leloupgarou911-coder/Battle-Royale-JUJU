@@ -402,8 +402,12 @@ function createZoneObstacles(zoneX: number, zoneY: number): GeoJSON.FeatureColle
   const size = GAME_ZONE_METERS / WORLD_METERS;
   const features: GeoJSON.Feature<GeoJSON.Point>[] = [];
   for (let i = 0; i < 28; i += 1) {
-    const x = (zoneX + 0.08 + random() * 0.84) * size;
-    const y = (zoneY + 0.08 + random() * 0.84) * size;
+    const localX = 0.08 + random() * 0.84;
+    const localY = 0.08 + random() * 0.84;
+    // Keep the central spawn point clear.
+    if (Math.hypot(localX - 0.5, localY - 0.5) < 0.13) continue;
+    const x = (zoneX + localX) * size;
+    const y = (zoneY + localY) * size;
     const lng = x * 360 - 180;
     const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180 / Math.PI;
     features.push({
