@@ -119,3 +119,8 @@ h1 span { color: var(--gold); }
 .poi-popup strong { font: 700 13px "DM Sans", sans-serif; }
 .poi-popup span { color: #6d7b82; font: 600 11px "DM Sans", sans-serif; }
 .poi-popup small { color: #8b969b; font: 10px "DM Sans", sans-serif; }
+
+
+.game-camera-button { width: 100%; min-height: 42px; margin-top: 9px; border: 1px solid rgba(228,183,127,.65); border-radius: 6px; background: rgba(228,183,127,.13); color: #f3f6f8; font: 700 9px "DM Sans", sans-serif; letter-spacing: .12em; cursor: pointer; }
+.game-camera-button::before { content: "⌖"; margin-right: 9px; color: var(--gold); font-size: 15px; vertical-align: -1px; }
+.game-camera-button:hover, .game-camera-button.active { background: rgba(228,183,127,.22); border-color: var(--gold); }
