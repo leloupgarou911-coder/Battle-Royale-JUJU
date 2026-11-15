@@ -92,6 +92,10 @@
       <section class="game-hud" aria-label="Game controls">
         <div class="game-hud-top"><span class="game-hud-brand">JUJU <b>GAME MODE</b></span><span id="game-player-status">PLAYER READY</span></div>
         <div class="game-hud-stats"><div><small>ACTIVE ZONE</small><strong id="game-zone-status">ZONE READY</strong><span id="game-zone-coordinates">0.000, 0.000</span></div><div><small>PLAYER</small><strong>TOP-DOWN</strong><span data-i18n="moveHelp">WASD / ARROWS TO MOVE</span></div></div>
+        <div class="game-speed-control">
+          <label for="game-speed">MOVEMENT SPEED <strong id="game-speed-value">180</strong></label>
+          <input id="game-speed" type="range" min="80" max="360" step="10" value="180" />
+        </div>
         <div class="game-touch-controls" aria-label="Touch movement controls">
           <button type="button" data-move="up" aria-label="Move up">▲</button>
           <div><button type="button" data-move="left" aria-label="Move left">◀</button><button type="button" data-move="down" aria-label="Move down">▼</button><button type="button" data-move="right" aria-label="Move right">▶</button></div>
