@@ -727,6 +727,16 @@ window.addEventListener("keydown", (event) => {
   event.preventDefault();
   movePlayer(direction[0], direction[1]);
 });
+document.querySelectorAll<HTMLButtonElement>("[data-move]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const directions: Record<string, [number, number]> = {
+      up: [0, -9], down: [0, 9], left: [-9, 0], right: [9, 0],
+    };
+    const direction = directions[button.dataset.move ?? ""];
+    if (direction) movePlayer(direction[0], direction[1]);
+  });
+});
+
 $("#globe-view").addEventListener("click", () => setMapView("globe"));
 
 $("#terrain-view").addEventListener("click", () => {
