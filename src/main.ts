@@ -2550,6 +2550,7 @@ document.querySelectorAll<HTMLButtonElement>("[data-place]").forEach((button) =>
 
 setLanguage("en");
 map.on("load", () => $("#map-live-dot").classList.add("is-ready"));
-map.on("error", () => {
-  if (!map.loaded()) mapStatus.textContent = translations[language].loading;
+map.on("error", (event) => {
+  if (event.error) console.warn("World map loading error:", event.error.message);
+  if (!map.loaded()) mapStatus.textContent = translations[language].mapError;
 });
