@@ -274,6 +274,14 @@ export class Game {
     window.removeEventListener("keyup", this.onKeyUp);
     document.removeEventListener("pointerlockchange", this.onPointerLockChange);
     document.removeEventListener("mousemove", this.onMouseMove);
+    this.scene.traverse((object) => {
+      if (object instanceof THREE.Mesh) {
+        object.geometry.dispose();
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        materials.forEach((material) => material.dispose());
+      }
+    });
     this.renderer.dispose();
+    this.renderer.domElement.remove();
   }
 }
