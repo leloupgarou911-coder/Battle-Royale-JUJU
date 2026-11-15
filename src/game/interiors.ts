@@ -110,3 +110,9 @@ export function createInteriorLayout(kind: BuildingKind): InteriorLayout {
     doors: layout.doors.map((door) => ({ ...door })),
   };
 }
+
+export function adjacentInteriorFloor(currentFloor: number, floorCount: number, direction: -1 | 1): number | null {
+  if (!Number.isInteger(currentFloor) || !Number.isInteger(floorCount) || floorCount < 1) return null;
+  const nextFloor = currentFloor + direction;
+  return nextFloor >= 0 && nextFloor < floorCount ? nextFloor : null;
+}
