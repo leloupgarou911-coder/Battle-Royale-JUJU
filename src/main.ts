@@ -382,6 +382,29 @@ function zonePolygon(zoneX: number, zoneY: number): GeoJSON.Feature<GeoJSON.Poly
   };
 }
 
+function createZoneObstacles(zoneX: number, zoneY: number): GeoJSON.FeatureCollection<GeoJSON.Point> {
+  // Deterministic decorative obstacles: the same zone always recreates the same layout.
+  let seed = Math.abs((zoneX * 73856093) ^ (zoneY * 19349663)) || 1;
+  const random = (): number => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+  const size = GAME_ZONE_METERS / WORLD_METERS;
+  const features: GeoJSON.Feature<GeoJSON.Point>[] = [];
+  for (let i = 0; i < 28; i += 1) {
+    const x = (zoneX + 0.08 + random() * 0.84) * size;
+    const y = (zoneY + 0.08 + random() * 0.84) * size;
+    const lng = x * 360 - 180;
+    const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180 / Math.PI;
+    features.push({
+      type: "Feature",
+      properties: { kind: random() > 0.28 ? "tree" : "rock", radius: random() > 0.5 ? 13 : 10 },
+      geometry: { type: "Point", coordinates: [lng, lat] },
+    });
+  }
+  return { type: "FeatureCollection", features };
+}
+
 function ensureGameLayers(): void {
   if (!map.getSource("openmaptiles")) return;
   if (!map.getLayer("juju-collision-buildings")) {
@@ -393,6 +416,36 @@ function ensureGameLayers(): void {
       minzoom: 15,
       filter: ["==", ["geometry-type"], "Polygon"],
       paint: { "fill-color": "#ffffff", "fill-opacity": 0.015 },
+    });
+  }
+  if (!map.getSource("juju-zone-obstacles")) {
+    map.addSource("juju-zone-obstacles", {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+    map.addLayer({
+      id: "juju-zone-rocks",
+      type: "circle",
+      source: "juju-zone-obstacles",
+      filter: ["==", ["get", "kind"], "rock"],
+      paint: {
+        "circle-radius": 6,
+        "circle-color": "#89949a",
+        "circle-stroke-color": "#35434a",
+        "circle-stroke-width": 2,
+      },
+    });
+    map.addLayer({
+      id: "juju-zone-trees",
+      type: "circle",
+      source: "juju-zone-obstacles",
+      filter: ["==", ["get", "kind"], "tree"],
+      paint: {
+        "circle-radius": 9,
+        "circle-color": "#4f9b68",
+        "circle-stroke-color": "#1e5639",
+        "circle-stroke-width": 3,
+      },
     });
   }
   if (!map.getSource("juju-active-zone")) {
@@ -421,6 +474,8 @@ function updateGameZone(lng: number, lat: number): void {
   activeZoneKey = zone.key;
   const source = map.getSource("juju-active-zone") as maplibregl.GeoJSONSource | undefined;
   source?.setData(zonePolygon(zone.x, zone.y));
+  const obstacles = map.getSource("juju-zone-obstacles") as maplibregl.GeoJSONSource | undefined;
+  obstacles?.setData(createZoneObstacles(zone.x, zone.y));
   $("#game-zone-status").textContent = `ZONE ${zone.x} · ${zone.y}`;
   map.once("idle", () => {
     if (gameMode && activeZoneKey === zone.key) {
@@ -442,10 +497,20 @@ function isBuildingCollision(lng: number, lat: number): boolean {
   const samples: [number, number][] = [
     [0, 0], [radius, 0], [-radius, 0], [0, radius], [0, -radius],
   ];
-  return samples.some(([dx, dy]) => map.queryRenderedFeatures(
+  const buildingHit = samples.some(([dx, dy]) => map.queryRenderedFeatures(
     [point.x + dx, point.y + dy],
     { layers: ["juju-collision-buildings"] },
   ).length > 0);
+  if (buildingHit) return true;
+  const obstacleSource = map.getSource("juju-zone-obstacles") as maplibregl.GeoJSONSource | undefined;
+  if (!obstacleSource) return false;
+  const zone = zoneFor(lng, lat);
+  const features = createZoneObstacles(zone.x, zone.y).features;
+  return features.some((feature) => {
+    const obstaclePoint = map.project(feature.geometry.coordinates as [number, number]);
+    const radius = feature.properties?.kind === "tree" ? 17 : 13;
+    return Math.hypot(obstaclePoint.x - point.x, obstaclePoint.y - point.y) < radius;
+  });
 }
 
 function startGameMode(): void {
@@ -499,8 +564,12 @@ function movePlayer(dx: number, dy: number): void {
     return;
   }
   $("#game-player-status").textContent = translations[language].playerReady;
+  const playerElement = playerMarker.getElement();
+  playerElement.classList.add("is-moving");
   playerMarker.setLngLat(next);
-  map.easeTo({ center: next, duration: 90, easing: (t) => t });
+  // Keep the character near screen center while the world glides underneath.
+  map.easeTo({ center: next, duration: 150, easing: (t) => t });
+  window.setTimeout(() => playerElement.classList.remove("is-moving"), 170);
   updateGameHud();
 }
 
