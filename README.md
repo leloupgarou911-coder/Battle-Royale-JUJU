@@ -119,3 +119,12 @@ JUJU World uses the OpenFreeMap Liberty vector style with OpenStreetMap-based ge
 - The previous single-session save is migrated to a first save slot when possible.
 - Saves are stored only in this browser's local storage. They are not synced, are not backups, and can be lost if browser site data is cleared. They contain location coordinates.
 - Slots store game-session metadata only, not map tiles or offline map data. Internet is still required to load the map.
+
+
+## Player progression
+
+- Every save slot stores its own XP, level (100 XP per level), distance, discovered map zones and cities, achievements, and reward titles.
+- Game movement measures geographic distance; each completed 25 metres awards 1 XP. First-time discovery of a 750 m game zone awards 25 XP. Selecting a city from the place search while in game mode records it once and awards 50 XP.
+- Seven achievements cover first/5 zones, first/5 cities, 1 km/10 km travelled, and 500 XP. Each unlock grants a displayed badge or title.
+- Progress is saved inside the active local save slot and restored when that slot is resumed. Browser-wide visited-zone outlines remain a separate history.
+- City discovery currently means selecting a city through the in-game place search; it is not yet automatically detected from the player's coordinates. Progress remains local to the browser and is not cloud-synchronised.
