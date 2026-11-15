@@ -2043,6 +2043,13 @@ $("#language-toggle").addEventListener("click", () => {
 $("#flat-view").addEventListener("click", () => setMapView("flat"));
 $("#game-camera").addEventListener("click", setGameCamera);
 $("#game-mode-toggle").addEventListener("click", () => gameMode ? stopGameMode() : startGameMode());
+$("#game-main-menu").addEventListener("click", () => {
+  if (gameMode) stopGameMode();
+  const home = document.querySelector<HTMLElement>("#home-screen");
+  const saves = document.querySelector<HTMLElement>("#resume-session");
+  if (saves) saves.hidden = true;
+  if (home) home.hidden = false;
+});
 $("#interior-exit").addEventListener("click", closeBuildingInterior);
 $("#building-interior").addEventListener("click", (event) => {
   if (event.target === $("#building-interior")) closeBuildingInterior();
