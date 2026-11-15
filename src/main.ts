@@ -7,7 +7,7 @@ maplibregl.setWorkerUrl(workerUrl);
 import "./style.css";
 import { createZoneObstacles, legacyMercatorZoneCenter, spawnForZone, zoneAtOffset, zoneFor, zonePolygon } from "./game/zones.ts";
 import { destinationFromDirection, haversineDistance, normalizeDirection } from "./game/movement.ts";
-import { classifyBuilding, createInteriorLayout, type BuildingKind, type InteriorDoor, type InteriorObject } from "./game/interiors.ts";
+import { adjacentInteriorFloor, classifyBuilding, createInteriorLayout, type BuildingKind, type InteriorDoor, type InteriorObject } from "./game/interiors.ts";
 import { applyDailyMissionProgress, createDailyMissionState as createProgressDailyMissionState, emptyProgress, ensureDailyMissions as ensureProgressDailyMissions, normalizeProgress, recordDiscoveredCity, recordDiscoveredZone, recordTravelDistance, type DailyMissionState, type MissionHistoryEntry, type PlayerProgress } from "./game/progression.ts";
 import { isValidGameSession, type SavedGameSession } from "./game/saves.ts";
 import { detectStreamingProfile, type NetworkInformationLike, type StreamingProfile } from "./game/streaming.ts";
@@ -1360,8 +1360,8 @@ function refreshInteriorStairs(): void {
 
 function changeInteriorFloor(direction: -1 | 1): void {
   if (!selectedBuildingLevels || selectedBuildingLevels <= 1) return;
-  const nextFloor = currentInteriorFloor + direction;
-  if (nextFloor < 0 || nextFloor >= selectedBuildingLevels) {
+  const nextFloor = adjacentInteriorFloor(currentInteriorFloor, selectedBuildingLevels, direction);
+  if (nextFloor === null) {
     $("#interior-message").textContent = translations[language].floorBoundaryHint;
     return;
   }
