@@ -293,3 +293,21 @@ h1 span { color: var(--gold); }
 .resume-session div { display: flex; flex-wrap: wrap; gap: 8px; }
 .resume-session button { flex: 1; min-height: 36px; padding: 8px 12px; border: 1px solid rgba(120,214,176,.45); border-radius: 5px; background: rgba(120,214,176,.12); color: #e5f5ed; font: 700 10px "DM Sans",sans-serif; cursor: pointer; }
 .resume-session button + button { border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.05); color: #b8c1c4; }
+
+
+/* Multiple local game saves */
+.resume-session { max-height: min(78vh, 620px); overflow-y: auto; }
+.save-slot-create { display: flex; gap: 7px; margin: 12px 0; }
+.save-slot-create input { min-width: 0; flex: 1; padding: 9px 10px; border: 1px solid rgba(255,255,255,.16); border-radius: 5px; background: rgba(255,255,255,.06); color: #edf4f1; font: 12px "DM Sans",sans-serif; }
+.save-slot-create button { padding: 8px 10px; border: 1px solid rgba(120,214,176,.4); border-radius: 5px; background: rgba(120,214,176,.12); color: #e5f5ed; font: 700 9px "DM Sans",sans-serif; cursor: pointer; }
+.save-slots-list { display: grid; gap: 8px; max-height: 310px; overflow-y: auto; }
+.save-slot-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px; border: 1px solid rgba(255,255,255,.1); border-radius: 6px; background: rgba(255,255,255,.035); }
+.save-slot-card > div:first-child { display: grid; gap: 4px; min-width: 0; }
+.save-slot-card strong { overflow-wrap: anywhere; color: #edf4f1; font-size: 11px; }
+.save-slot-card span,.save-slot-card small { color: #aab8b2; font-size: 9px; line-height: 1.4; }
+.save-slot-actions { display: flex; flex-shrink: 0; gap: 5px; }
+.save-slot-actions button,.save-new-exploration { padding: 7px 8px; border: 1px solid rgba(120,214,176,.35); border-radius: 4px; background: rgba(120,214,176,.1); color: #e5f5ed; font: 700 8px "DM Sans",sans-serif; cursor: pointer; }
+.save-slot-actions button + button { border-color: rgba(255,255,255,.12); background: transparent; color: #aab8b2; }
+.save-slots-empty { padding: 12px; color: #aab8b2; font-size: 11px; }
+.save-new-exploration { width: 100%; margin-top: 10px; }
+@media (max-width: 520px) { .save-slot-card { align-items: flex-start; flex-direction: column; } }
