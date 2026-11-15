@@ -2191,6 +2191,15 @@ game3dButton?.addEventListener("click", () => {
   if (!gameMode || !game3dOverlay || !game3dContainer) return;
   stopGameMode();
   game3dOverlay.hidden = false;
+  const t = translations[language];
+  const title = game3dOverlay.querySelector<HTMLElement>('[data-i18n="game3dTitle"]');
+  const description = game3dOverlay.querySelector<HTMLElement>('[data-i18n="game3dDescription"]');
+  const exit = game3dOverlay.querySelector<HTMLElement>('[data-i18n="game3dExit"]');
+  const help = game3dOverlay.querySelector<HTMLElement>('[data-i18n="game3dHelp"]');
+  if (title) title.textContent = t.game3dTitle;
+  if (description) description.textContent = t.game3dDescription;
+  if (exit) exit.textContent = t.game3dExit;
+  if (help) help.textContent = t.game3dHelp;
   try {
     activeThreeGame?.dispose();
     activeThreeGame = new Game(game3dContainer, (x, z) => {
