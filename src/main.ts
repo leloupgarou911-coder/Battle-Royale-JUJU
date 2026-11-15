@@ -13,6 +13,7 @@ const translations = {
     discover: "DISCOVER",
     mapView: "MAP VIEW",
     flat: "2D MAP",
+    gameCamera: "TOP-DOWN GAME CAMERA",
     globe: "3D GLOBE",
     buildings: "3D BUILDINGS",
     terrain: "3D TERRAIN",
@@ -49,6 +50,7 @@ const translations = {
     discover: "DÉCOUVRIR",
     mapView: "VUE DE LA CARTE",
     flat: "CARTE 2D",
+    gameCamera: "CAMÉRA AÉRIENNE DU JEU",
     globe: "GLOBE 3D",
     buildings: "BÂTIMENTS 3D",
     terrain: "RELIEF 3D",
@@ -325,6 +327,19 @@ function disableTerrain(): void {
   $("#terrain-view").classList.remove("active");
 }
 
+function setGameCamera(): void {
+  disableTerrain();
+  map.setProjection({ type: "mercator" });
+  map.easeTo({ center: [0, 20], zoom: 2.1, pitch: 0, bearing: 0, duration: 900 });
+  $("#flat-view").classList.add("active");
+  $("#globe-view").classList.remove("active");
+  $("#game-camera").classList.add("active");
+  $("#place-card").hidden = true;
+  selectedPlaceMarker?.remove();
+  selectedPlaceMarker = null;
+  showToast(language === "en" ? "Top-down game camera enabled." : "Caméra aérienne du jeu activée.");
+}
+
 function setMapView(view: "flat" | "globe"): void {
   disableTerrain();
   const isFlat = view === "flat";
@@ -335,6 +350,7 @@ function setMapView(view: "flat" | "globe"): void {
     duration: 900,
   });
   $("#flat-view").classList.toggle("active", isFlat);
+  $("#game-camera").classList.remove("active");
   $("#globe-view").classList.toggle("active", !isFlat);
 }
 
@@ -377,6 +393,7 @@ $("#language-toggle").addEventListener("click", () => {
 });
 
 $("#flat-view").addEventListener("click", () => setMapView("flat"));
+$("#game-camera").addEventListener("click", setGameCamera);
 $("#globe-view").addEventListener("click", () => setMapView("globe"));
 
 $("#terrain-view").addEventListener("click", () => {
