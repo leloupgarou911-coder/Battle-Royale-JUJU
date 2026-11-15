@@ -35,6 +35,7 @@ const translations = {
     saveSlotsDescription: "Choose a save to continue or create a new one.",
     saveSlotCreate: "SAVE CURRENT",
     saveLimit: "You have reached the 10-save limit. Delete a save before creating another.",
+    movementSpeedLabel: "MOVEMENT SPEED (m/s)",
     progressTitle: "PLAYER PROGRESSION", progressLevel: "LEVEL", progressNext: "NEXT LEVEL",
     progressDistance: "DISTANCE", progressZones: "ZONES", progressCities: "CITIES",
     progressAchievements: "ACHIEVEMENTS", progressRewards: "UNLOCKED REWARDS",
@@ -155,6 +156,7 @@ const translations = {
     saveSlotsDescription: "Choisissez une sauvegarde ou créez-en une nouvelle.",
     saveSlotCreate: "ENREGISTRER",
     saveLimit: "Vous avez atteint la limite de 10 sauvegardes. Supprimez-en une avant d’en créer une autre.",
+    movementSpeedLabel: "VITESSE DE DÉPLACEMENT (m/s)",
     progressTitle: "PROGRESSION DU JOUEUR", progressLevel: "NIVEAU", progressNext: "NIVEAU SUIVANT",
     progressDistance: "DISTANCE", progressZones: "ZONES", progressCities: "VILLES",
     progressAchievements: "SUCCÈS", progressRewards: "RÉCOMPENSES DÉBLOQUÉES",
@@ -682,13 +684,13 @@ function openHomeSettings(): void {
   const speedText = document.createElement("div");
   speedText.innerHTML = '<strong>' + (language === "fr" ? "VITESSE DE DÉPLACEMENT" : "MOVEMENT SPEED") + '</strong><small>' + (language === "fr" ? "Ajustable à tout moment" : "Can be adjusted anytime") + '</small>';
   const speed = document.createElement("input");
-  speed.type = "range"; speed.min = "80"; speed.max = "360"; speed.step = "10"; speed.value = String(movementSpeed);
+  speed.type = "range"; speed.min = "1"; speed.max = "12"; speed.step = "0.5"; speed.value = String(movementSpeed);
   speed.addEventListener("input", () => {
     movementSpeed = Number(speed.value);
     const control = document.querySelector<HTMLInputElement>("#game-speed");
     const value = document.querySelector<HTMLElement>("#game-speed-value");
     if (control) control.value = speed.value;
-    if (value) value.textContent = speed.value;
+    if (value) value.textContent = Number(speed.value).toFixed(1);
   });
   speedRow.append(speedText, speed);
   const poiRow = document.createElement("div");
