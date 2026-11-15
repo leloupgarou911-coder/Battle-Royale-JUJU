@@ -34,6 +34,7 @@ const translations = {
     saveSlotsTitle: "SAVED EXPLORATIONS",
     saveSlotsDescription: "Choose a save to continue or create a new one.",
     saveSlotCreate: "SAVE CURRENT",
+    saveLimit: "You have reached the 10-save limit. Delete a save before creating another.",
     progressTitle: "PLAYER PROGRESSION", progressLevel: "LEVEL", progressNext: "NEXT LEVEL",
     progressDistance: "DISTANCE", progressZones: "ZONES", progressCities: "CITIES",
     progressAchievements: "ACHIEVEMENTS", progressRewards: "UNLOCKED REWARDS",
@@ -153,6 +154,7 @@ const translations = {
     saveSlotsTitle: "EXPLORATIONS SAUVEGARDÉES",
     saveSlotsDescription: "Choisissez une sauvegarde ou créez-en une nouvelle.",
     saveSlotCreate: "ENREGISTRER",
+    saveLimit: "Vous avez atteint la limite de 10 sauvegardes. Supprimez-en une avant d’en créer une autre.",
     progressTitle: "PROGRESSION DU JOUEUR", progressLevel: "NIVEAU", progressNext: "NIVEAU SUIVANT",
     progressDistance: "DISTANCE", progressZones: "ZONES", progressCities: "VILLES",
     progressAchievements: "SUCCÈS", progressRewards: "RÉCOMPENSES DÉBLOQUÉES",
@@ -530,6 +532,11 @@ function saveGameSession(force = false): void {
 function createNamedSaveSlot(): void {
   const input = document.querySelector<HTMLInputElement>("#save-slot-name");
   const name = input?.value.trim().slice(0, 32);
+  if (savedGameSlots.length >= SAVE_SLOT_LIMIT) {
+    showToast(translations[language].saveLimit);
+    input?.focus();
+    return;
+  }
   if (!name) {
     showToast(language === "en" ? "Enter a name for this save." : "Donnez un nom à cette sauvegarde.");
     input?.focus();
@@ -1885,6 +1892,10 @@ function startGameMode(resumeSession: SavedGameSession | null = null): void {
     showToast(language === "en" ? "The world map is still loading. Please wait a moment." : "La carte du monde est en cours de chargement. Patientez un instant.");
     return;
   }
+  if (!activeSlot() && savedGameSlots.length >= SAVE_SLOT_LIMIT) {
+    showToast(translations[language].saveLimit);
+    return;
+  }
   gameMode = true;
   createMiniMap();
   heldDirections.clear();
@@ -2146,11 +2157,17 @@ map.on("error", (event) => {
 
 
 $("#home-play").addEventListener("click", () => {
+  if (!map.loaded()) {
+    showToast(language === "en" ? "The world map is still loading. Please wait a moment." : "La carte du monde est en cours de chargement. Patientez un instant.");
+    return;
+  }
   if (savedGameSlots.length > 0) openHomeSaves();
   else {
-    const home = document.querySelector<HTMLElement>("#home-screen");
-    if (home) home.hidden = true;
     startGameMode();
+    if (gameMode) {
+      const home = document.querySelector<HTMLElement>("#home-screen");
+      if (home) home.hidden = true;
+    }
   }
 });
 $("#home-saves").addEventListener("click", openHomeSaves);
