@@ -588,3 +588,143 @@ button:focus-visible,input:focus-visible{outline:2px solid #8fe2d9;outline-offse
 }
 @keyframes home-globe-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
 @keyframes home-pulse{0%,100%{opacity:1}50%{opacity:.45}}
+
+
+/* JUJU WORLD — in-game interface refinement (presentation only) */
+.game-mode .game-hud {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "top top"
+    "stats stats"
+    "progress missions"
+    "speed touch"
+    "actions actions"
+    "clear clear";
+  align-items: start;
+  gap: 10px;
+  width: min(650px, calc(100vw - 36px));
+  max-height: calc(100dvh - 36px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(128, 218, 211, .35) transparent;
+  padding: 15px;
+  border-color: rgba(137, 220, 213, .3);
+  background:
+    linear-gradient(145deg, rgba(9, 24, 34, .97), rgba(5, 14, 22, .96));
+  transition: opacity .22s ease, transform .22s ease;
+}
+.game-mode .game-hud-top { grid-area: top; min-height: 26px; }
+.game-mode .game-hud-stats { grid-area: stats; margin: 0; }
+.game-mode .player-progress-panel { grid-area: progress; min-width: 0; height: 100%; padding: 12px; }
+.game-mode .daily-missions-panel { grid-area: missions; min-width: 0; height: 100%; padding: 12px; }
+.game-mode .game-speed-control { grid-area: speed; min-width: 0; margin: 0; }
+.game-mode .game-touch-controls { grid-area: touch; min-width: 0; margin: 0; }
+.game-mode .game-hud-actions { grid-area: actions; }
+.game-mode .game-clear-explored { grid-area: clear; justify-self: end; }
+.game-mode .game-hud-stats > div {
+  padding: 9px 10px;
+  border: 1px solid rgba(143, 196, 201, .11);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .025);
+}
+.game-mode .game-hud-stats strong { font-size: 11px; }
+.game-mode .game-hud-stats span { font-size: 8px; line-height: 1.4; }
+.game-mode .progress-heading { gap: 8px; }
+.game-mode .progress-heading > strong,
+.game-mode .daily-missions-heading strong { font-size: 9px; letter-spacing: .1em; }
+.game-mode .progress-xp-label { margin-top: 9px; }
+.game-mode .progress-xp-track,
+.game-mode .mission-progress-track { overflow: hidden; border-radius: 99px; }
+.game-mode .progress-xp-track { height: 7px; }
+.game-mode .mission-progress-track { height: 5px; }
+.game-mode .progress-stats { gap: 6px; }
+.game-mode .progress-stats > div { min-width: 0; }
+.game-mode .progress-stats small { font-size: 7px; }
+.game-mode .progress-stats strong { font-size: 12px; }
+.game-mode .progress-rewards-heading,
+.game-mode .mission-history-heading { margin-top: 10px; font-size: 7px; }
+.game-mode .progress-rewards { gap: 5px; }
+.game-mode .progress-reward { font-size: 8px; }
+.game-mode .daily-missions-heading { align-items: flex-start; gap: 6px; flex-wrap: wrap; }
+.game-mode .daily-missions-heading span { font-size: 7px; }
+.game-mode .daily-missions-list { gap: 7px; }
+.game-mode .daily-mission-card { padding: 8px; }
+.game-mode .daily-mission-top { gap: 6px; }
+.game-mode .daily-mission-top strong { font-size: 9px; line-height: 1.4; }
+.game-mode .daily-mission-top span,
+.game-mode .daily-mission-card small { font-size: 8px; }
+.game-mode .mission-history { max-height: 70px; overflow: auto; }
+.game-mode .mission-history-item { font-size: 8px; }
+.game-mode .game-speed-control { padding: 10px; }
+.game-mode .game-touch-controls { align-self: center; justify-self: center; }
+.game-mode .game-touch-controls button { width: 38px; height: 34px; }
+.game-mode .game-hud-actions button { min-width: 0; padding: 8px 6px; line-height: 1.35; }
+.game-mode .game-clear-explored { padding: 7px 9px; font-size: 7px; }
+.game-mode .map-hint {
+  z-index: 6;
+  padding: 9px 12px;
+  border-color: rgba(143, 196, 201, .22);
+  background: rgba(5, 15, 23, .88);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
+}
+.game-mode .maplibregl-ctrl-top-left,
+.game-mode .maplibregl-ctrl-top-right { top: 14px; }
+.game-mode .maplibregl-ctrl-bottom-left { bottom: 14px; left: 14px; }
+.game-mode .maplibregl-ctrl-bottom-right { bottom: 14px; right: 14px; }
+.game-mode .maplibregl-ctrl-group { box-shadow: 0 8px 24px rgba(0, 0, 0, .28); }
+.game-mode #map .maplibregl-canvas {
+  filter: saturate(1.06) contrast(1.025);
+  transition: filter .35s ease;
+}
+@media (max-width: 760px) {
+  .game-mode .game-hud {
+    width: min(520px, calc(100vw - 20px));
+    max-height: min(58dvh, 560px);
+    top: 10px;
+    right: 10px;
+    gap: 8px;
+    padding: 10px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "top"
+      "stats"
+      "progress"
+      "missions"
+      "speed"
+      "touch"
+      "actions"
+      "clear";
+  }
+  .game-mode .game-hud-stats { gap: 5px; }
+  .game-mode .game-hud-stats > div { padding: 7px 6px; }
+  .game-mode .game-hud-stats small { font-size: 6px; }
+  .game-mode .game-hud-stats strong { font-size: 9px; }
+  .game-mode .game-hud-stats span { font-size: 7px; }
+  .game-mode .player-progress-panel,
+  .game-mode .daily-missions-panel { padding: 9px; }
+  .game-mode .mission-history { max-height: 48px; }
+  .game-mode .game-touch-controls { flex-direction: row; }
+  .game-mode .game-hud-actions { flex-wrap: wrap; }
+  .game-mode .game-hud-actions button { flex: 1 1 30%; }
+  .game-mode .game-clear-explored { justify-self: stretch; }
+  .game-mode .map-hint { left: 10px; bottom: 10px; max-width: calc(100vw - 20px); }
+  .game-mode .maplibregl-ctrl-bottom-left { left: 10px; bottom: 52px; }
+  .game-mode .maplibregl-ctrl-bottom-right { right: 10px; bottom: 52px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .game-mode .game-hud,
+  .game-mode .map-hint { animation: juju-hud-enter .3s cubic-bezier(.2,.75,.25,1) both; }
+  .game-mode .player-progress-panel,
+  .game-mode .daily-missions-panel { animation: juju-panel-enter .32s ease-out both; }
+  .game-mode .daily-missions-panel { animation-delay: .04s; }
+}
+@keyframes juju-hud-enter {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes juju-panel-enter {
+  from { opacity: .65; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
