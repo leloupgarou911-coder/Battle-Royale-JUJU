@@ -2427,7 +2427,13 @@ interface PlaceResult {
   longitude: number;
 }
 
+let searchRequestId = 0;
+let activeSearchController: AbortController | null = null;
+
 async function searchPlaces(query: string): Promise<void> {
+  const requestId = ++searchRequestId;
+  activeSearchController?.abort();
+  activeSearchController = null;
   searchResults.replaceChildren();
   if (query.trim().length < 2) return;
 
@@ -2436,6 +2442,8 @@ async function searchPlaces(query: string): Promise<void> {
   loading.textContent = translations[language].searching;
   searchResults.append(loading);
 
+  const controller = new AbortController();
+  activeSearchController = controller;
   try {
     const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
     url.search = new URLSearchParams({
@@ -2445,9 +2453,10 @@ async function searchPlaces(query: string): Promise<void> {
       format: "json",
     }).toString();
 
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: controller.signal });
     if (!response.ok) throw new Error("Geocoding request failed");
     const data = (await response.json()) as { results?: PlaceResult[] };
+    if (requestId !== searchRequestId) return;
     const places = data.results ?? [];
     searchResults.replaceChildren();
 
@@ -2471,12 +2480,16 @@ async function searchPlaces(query: string): Promise<void> {
       button.addEventListener("click", () => selectPlace(place));
       searchResults.append(button);
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return;
+    if (requestId !== searchRequestId) return;
     searchResults.replaceChildren();
-    const error = document.createElement("p");
-    error.className = "search-message";
-    error.textContent = translations[language].searchError;
-    searchResults.append(error);
+    const errorMessage = document.createElement("p");
+    errorMessage.className = "search-message";
+    errorMessage.textContent = translations[language].searchError;
+    searchResults.append(errorMessage);
+  } finally {
+    if (requestId === searchRequestId) activeSearchController = null;
   }
 }
 
