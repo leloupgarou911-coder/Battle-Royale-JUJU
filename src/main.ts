@@ -2210,6 +2210,30 @@ game3dButton?.addEventListener("click", () => {
     const key = String(feature.id ?? JSON.stringify(feature.geometry.coordinates));
     if (!uniqueBuildings.has(key)) uniqueBuildings.set(key, feature);
   });
+  const roadClasses = new Set(["motorway", "trunk", "primary", "secondary", "tertiary", "minor",
+    "residential", "unclassified", "service", "living_street", "pedestrian", "track", "path", "footway", "cycleway", "steps"]);
+  const mappedRoads = map.querySourceFeatures("openmaptiles", { sourceLayer: "transportation" })
+    .filter((feature) => (feature.geometry.type === "LineString" || feature.geometry.type === "MultiLineString")
+      && roadClasses.has(String(feature.properties?.class ?? "")))
+    .slice(0, 700) as unknown as GeoJSON.Feature<GeoJSON.LineString | GeoJSON.MultiLineString>[];
+  // Sample the active DEM only when the map's terrain layer is enabled. Otherwise
+  // the 3D prototype clearly remains at sea-level rather than inventing elevations.
+  const terrainSegments = 16;
+  const terrainSize = 300;
+  const terrainSamples: { x: number; z: number; elevation: number }[] = [];
+  const metersPerLongitude = 111320 * Math.cos(origin.lat * Math.PI / 180);
+  if (terrainEnabled && metersPerLongitude > 1) {
+    for (let row = 0; row <= terrainSegments; row += 1) {
+      for (let column = 0; column <= terrainSegments; column += 1) {
+        const x = -terrainSize / 2 + (column / terrainSegments) * terrainSize;
+        const z = -terrainSize / 2 + (row / terrainSegments) * terrainSize;
+        const lng = origin.lng + x / metersPerLongitude;
+        const lat = origin.lat - z / 111320;
+        const elevation = map.queryTerrainElevation([lng, lat]);
+        terrainSamples.push({ x, z, elevation: Number.isFinite(elevation) ? Number(elevation) : 0 });
+      }
+    }
+  }
   stopGameMode();
   game3dOverlay.hidden = false;
   const t = translations[language];
@@ -2228,12 +2252,14 @@ game3dButton?.addEventListener("click", () => {
       lastThreeDimensionalPosition = [lng, lat];
       const readout = document.querySelector<HTMLElement>("#game-3d-position");
       if (readout) readout.textContent = `3D · ${x.toFixed(1)} / ${z.toFixed(1)} m · ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-    }, { origin: [origin.lng, origin.lat], buildings: [...uniqueBuildings.values()] });
+    }, { origin: [origin.lng, origin.lat], buildings: [...uniqueBuildings.values()], roads: mappedRoads, terrain: terrainSamples, terrainSize, terrainSegments });
     activeThreeGame.start();
     const count = uniqueBuildings.size;
+    const roadCount = mappedRoads.length;
+    const terrainReady = terrainSamples.length > 0;
     showToast(language === "fr"
-      ? (count ? `${count} empreintes de bâtiments cartographiques chargées en 3D.` : "Aucun bâtiment cartographique chargé ici : décor de secours affiché.")
-      : (count ? `${count} mapped building footprints loaded in 3D.` : "No mapped buildings loaded here: fallback scenery shown."));
+      ? `${count} bâtiments · ${roadCount} segments routiers cartographiques · relief ${terrainReady ? "DEM actif" : "plat (activez le relief sur la carte avant le mode 3D") }.`
+      : `${count} buildings · ${roadCount} mapped road features · terrain ${terrainReady ? "DEM active" : "flat (enable map terrain before entering 3D)"}.`);
   } catch (error) {
     console.error("Could not start the Three.js world:", error);
     game3dOverlay.hidden = true;
