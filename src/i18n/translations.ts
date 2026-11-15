@@ -178,7 +178,7 @@ export const translations = {
     game3dTitle: "JUJU WORLD · PROTOTYPE 3D",
     game3dDescription: "Prototype 3D · empreintes de bâtiments cartographiques si disponibles ; terrain et routes encore simplifiés",
     game3dExit: "RETOUR À LA CARTE",
-    game3dHelp: "ZQSD / WASD pour bouger · Souris pour regarder · Cliquez sur la scène pour capturer le pointeur",
+    game3dHelp: "ZQSD / WASD pour bouger · ESPACE pour sauter · Souris pour regarder · Molette pour zoomer",
     enterGame: "ENTRER EN MODE JEU",
     exitGame: "QUITTER LE MODE JEU",
     loadZone: "RECHARGER LA ZONE",
