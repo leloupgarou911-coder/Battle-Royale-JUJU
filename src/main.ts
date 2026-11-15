@@ -56,6 +56,21 @@ const translations = {
     interiorRoom: "Main room",
     interiorStorage: "Side room",
     closeInterior: "LEAVE BUILDING",
+    interiorMove: "MOVE: WASD / ARROWS · INTERACT: E",
+    interiorInteract: "Press E near furniture to inspect it.",
+    interiorDoor: "Door",
+    interiorDoorOpen: "Open doorway",
+    interiorHallObject: "Hall chair",
+    interiorSofa: "Sofa",
+    interiorTable: "Table",
+    interiorCabinet: "Cabinet",
+    interiorCrate: "Storage crate",
+    interiorObjectHint: "You inspected",
+    interiorDoorHint: "You passed through a doorway",
+    interiorWallHint: "A wall blocks the way",
+    interiorHallName: "Entrance hall",
+    interiorMainName: "Living room",
+    interiorSideName: "Storage room",
     natureTitle: "Outdoor area",
     treeInfo: "Decorative tree · blocks movement",
     rockInfo: "Decorative rock · blocks movement",
@@ -111,6 +126,21 @@ const translations = {
     interiorRoom: "Pièce principale",
     interiorStorage: "Pièce annexe",
     closeInterior: "SORTIR DU BÂTIMENT",
+    interiorMove: "DÉPLACEMENT : ZQSD / FLÈCHES · INTERACTION : E",
+    interiorInteract: "Appuyez sur E près d’un meuble pour l’examiner.",
+    interiorDoor: "Porte",
+    interiorDoorOpen: "Passage ouvert",
+    interiorHallObject: "Chaise du hall",
+    interiorSofa: "Canapé",
+    interiorTable: "Table",
+    interiorCabinet: "Armoire",
+    interiorCrate: "Caisse de rangement",
+    interiorObjectHint: "Vous examinez",
+    interiorDoorHint: "Vous avez franchi une porte",
+    interiorWallHint: "Un mur bloque le passage",
+    interiorHallName: "Hall d’entrée",
+    interiorMainName: "Salon",
+    interiorSideName: "Réserve",
     natureTitle: "Espace extérieur",
     treeInfo: "Arbre décoratif · bloque le déplacement",
     rockInfo: "Rocher décoratif · bloque le déplacement",
@@ -138,6 +168,9 @@ let playerMarker: maplibregl.Marker | null = null;
 let virtualEntranceMarker: maplibregl.Marker | null = null;
 let selectedBuildingName = "";
 let activeZoneKey = "";
+let interiorPosition = { x: 2, y: 4 };
+let interiorLastDirection = "down";
+let interiorLastMessage = "";
 const GAME_ZONE_METERS = 750;
 const WORLD_METERS = 40075016.68557849;
 
@@ -677,18 +710,126 @@ function isBuildingCollision(lng: number, lat: number): boolean {
   });
 }
 
+const interiorObjects = [
+  { id: "chair", x: 2, y: 2, label: "interiorHallObject", glyph: "♜" },
+  { id: "sofa", x: 6, y: 2, label: "interiorSofa", glyph: "▰" },
+  { id: "table", x: 9, y: 2, label: "interiorTable", glyph: "▤" },
+  { id: "cabinet", x: 6, y: 5, label: "interiorCabinet", glyph: "▥" },
+  { id: "crate", x: 9, y: 5, label: "interiorCrate", glyph: "▣" },
+] as const;
+
+const interiorDoors = [
+  { id: "hall-door", x: 4, y: 3, room: "interiorHallName" },
+  { id: "storage-door", x: 7, y: 4, room: "interiorSideName" },
+] as const;
+
+function interiorCellKey(x: number, y: number): string { return `${x},${y}`; }
+
+function renderInterior(): void {
+  const board = $("#interior-board");
+  board.replaceChildren();
+  const objectAt = new Map(interiorObjects.map((item) => [interiorCellKey(item.x, item.y), item]));
+  const doorAt = new Map(interiorDoors.map((door) => [interiorCellKey(door.x, door.y), door]));
+  for (let y = 0; y < 8; y += 1) {
+    for (let x = 0; x < 12; x += 1) {
+      const cell = document.createElement("div");
+      cell.className = "interior-cell";
+      cell.style.gridColumn = String(x + 1);
+      cell.style.gridRow = String(y + 1);
+      const boundary = x === 0 || x === 11 || y === 0 || y === 7;
+      const partition = (x === 4 && y !== 3 && y > 0 && y < 7)
+        || (y === 4 && x >= 5 && x <= 10 && x !== 7);
+      if (boundary || partition) {
+        cell.classList.add("interior-wall");
+      } else {
+        cell.classList.add("interior-floor");
+        if ((x + y) % 2 === 0) cell.classList.add("floor-alt");
+      }
+      const door = doorAt.get(interiorCellKey(x, y));
+      if (door) {
+        cell.className = "interior-cell interior-door";
+        cell.textContent = "↔";
+        cell.title = translations[language].interiorDoor;
+      }
+      const item = objectAt.get(interiorCellKey(x, y));
+      if (item) {
+        cell.classList.add("interior-furniture");
+        cell.textContent = item.glyph;
+        cell.setAttribute("aria-label", translations[language][item.label]);
+        cell.title = translations[language][item.label];
+        cell.dataset.object = item.id;
+        cell.addEventListener("click", () => inspectInteriorObject(item.id));
+      }
+      if (x === interiorPosition.x && y === interiorPosition.y) {
+        const player = document.createElement("span");
+        player.className = "interior-player";
+        player.dataset.direction = interiorLastDirection;
+        player.textContent = "●";
+        cell.append(player);
+        cell.classList.add("interior-player-cell");
+      }
+      board.append(cell);
+    }
+  }
+  $("#interior-room-status").textContent = interiorRoomForPosition();
+}
+
+function interiorRoomForPosition(): string {
+  if (interiorPosition.x <= 3) return translations[language].interiorHallName;
+  if (interiorPosition.y >= 5) return translations[language].interiorSideName;
+  return translations[language].interiorMainName;
+}
+
+function inspectInteriorObject(id: string): void {
+  const item = interiorObjects.find((object) => object.id === id);
+  if (!item) return;
+  interiorLastMessage = `${translations[language].interiorObjectHint} : ${translations[language][item.label]}`;
+  $("#interior-message").textContent = interiorLastMessage;
+}
+
+function moveInterior(dx: number, dy: number): void {
+  const next = { x: interiorPosition.x + dx, y: interiorPosition.y + dy };
+  if (next.x < 1 || next.x > 10 || next.y < 1 || next.y > 6) {
+    $("#interior-message").textContent = translations[language].interiorWallHint;
+    return;
+  }
+  const blocked = interiorObjects.some((item) => item.x === next.x && item.y === next.y);
+  const wall = (next.x === 4 && next.y !== 3) || (next.y === 4 && next.x >= 5 && next.x <= 10 && next.x !== 7);
+  if (blocked || wall) {
+    $("#interior-message").textContent = translations[language].interiorWallHint;
+    return;
+  }
+  const crossedDoor = interiorDoors.some((door) => door.x === next.x && door.y === next.y);
+  interiorPosition = next;
+  if (crossedDoor) $("#interior-message").textContent = translations[language].interiorDoorHint;
+  else $("#interior-message").textContent = translations[language].interiorInteract;
+  renderInterior();
+}
+
+function interactWithInterior(): void {
+  const nearby = interiorObjects.find((item) => Math.abs(item.x - interiorPosition.x) + Math.abs(item.y - interiorPosition.y) <= 1);
+  if (nearby) {
+    inspectInteriorObject(nearby.id);
+    return;
+  }
+  const nearDoor = interiorDoors.some((door) => Math.abs(door.x - interiorPosition.x) + Math.abs(door.y - interiorPosition.y) <= 1);
+  $("#interior-message").textContent = nearDoor ? translations[language].interiorDoorHint : translations[language].interiorInteract;
+}
+
 function openBuildingInterior(): void {
   if (!gameMode) return;
-  const modal = $("#building-interior");
+  stopMovementLoop();
+  heldDirections.clear();
+  interiorPosition = { x: 2, y: 4 };
+  interiorLastDirection = "down";
   $("#interior-building-name").textContent = selectedBuildingName;
   $("#interior-title").textContent = translations[language].interiorTitle;
   $("#interior-note").textContent = translations[language].interiorNote;
-  $("#interior-hall").textContent = translations[language].interiorHall;
-  $("#interior-room").textContent = translations[language].interiorRoom;
-  $("#interior-storage").textContent = translations[language].interiorStorage;
+  $("#interior-controls").textContent = translations[language].interiorMove;
+  $("#interior-message").textContent = translations[language].interiorInteract;
   $("#interior-exit").textContent = translations[language].closeInterior;
-  modal.hidden = false;
-  stopMovementLoop();
+  renderInterior();
+  $("#building-interior").hidden = false;
 }
 
 function closeBuildingInterior(): void {
@@ -922,6 +1063,25 @@ $("#game-zone-reload").addEventListener("click", () => {
   showToast(language === "en" ? "Visible map zone refreshed." : "Zone cartographique visible actualisée.");
 });
 window.addEventListener("keydown", (event) => {
+  if (!$("#building-interior").hidden) {
+    const key = event.key.toLowerCase();
+    const moves: Record<string, [number, number, string]> = {
+      arrowup: [0, -1, "up"], w: [0, -1, "up"], z: [0, -1, "up"],
+      arrowdown: [0, 1, "down"], s: [0, 1, "down"],
+      arrowleft: [-1, 0, "left"], a: [-1, 0, "left"], q: [-1, 0, "left"],
+      arrowright: [1, 0, "right"], d: [1, 0, "right"],
+    };
+    if (moves[key]) {
+      event.preventDefault();
+      const [dx, dy, direction] = moves[key];
+      interiorLastDirection = direction;
+      moveInterior(dx, dy);
+    } else if (key === "e") {
+      event.preventDefault();
+      interactWithInterior();
+    }
+    return;
+  }
   const target = event.target as HTMLElement | null;
   if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
   if (!directionKeys[event.key.toLowerCase()] || !gameMode) return;
