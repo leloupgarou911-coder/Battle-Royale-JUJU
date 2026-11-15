@@ -106,13 +106,15 @@
         </div>
       </section>
 
-      <section id="resume-session" class="resume-session" hidden aria-label="Resume previous game session">
-        <strong data-i18n="resumeTitle">RESUME YOUR SESSION?</strong>
-        <p id="resume-session-detail"></p>
-        <div>
-          <button id="resume-session-continue" type="button" data-i18n="resumeContinue">RESUME</button>
-          <button id="resume-session-new" type="button" data-i18n="resumeNew">NEW EXPLORATION</button>
+      <section id="resume-session" class="resume-session" hidden aria-label="Saved game sessions">
+        <strong data-i18n="saveSlotsTitle">SAVED EXPLORATIONS</strong>
+        <p data-i18n="saveSlotsDescription">Choose a save to continue or create a new one.</p>
+        <div class="save-slot-create">
+          <input id="save-slot-name" type="text" maxlength="32" placeholder="Name this exploration" aria-label="Save name">
+          <button id="save-slot-create" type="button" data-i18n="saveSlotCreate">SAVE CURRENT</button>
         </div>
+        <div id="save-slots-list" class="save-slots-list"></div>
+        <button id="resume-session-new" class="save-new-exploration" type="button" data-i18n="resumeNew">NEW EXPLORATION</button>
       </section>
       <section class="game-hud" aria-label="Game controls">
         <div class="game-hud-top"><span class="game-hud-brand">JUJU <b>GAME MODE</b></span><span id="game-player-status">PLAYER READY</span></div>
