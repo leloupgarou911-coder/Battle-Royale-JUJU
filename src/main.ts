@@ -71,6 +71,34 @@ const translations = {
     interiorHallName: "Entrance hall",
     interiorMainName: "Living room",
     interiorSideName: "Storage room",
+    buildingTypeHouse: "House",
+    buildingTypeApartment: "Apartment building",
+    buildingTypeSchool: "School",
+    buildingTypeShop: "Shop",
+    buildingTypeOffice: "Office",
+    buildingTypeIndustrial: "Industrial building",
+    buildingTypeOther: "Unclassified building",
+    interiorDataSource: "Mapped building footprint · OpenStreetMap tags",
+    interiorGeneratedNote: "Interior layout is generated from the mapped building category; it is not a surveyed floor plan.",
+    roomKitchen: "Kitchen",
+    roomBedroom: "Bedroom",
+    roomClassroom: "Classroom",
+    roomCorridor: "Corridor",
+    roomShopFloor: "Sales floor",
+    roomStock: "Stock room",
+    roomReception: "Reception",
+    roomWorkspace: "Workspace",
+    roomWorkshop: "Workshop",
+    furnitureBed: "Bed",
+    furnitureDesk: "Desk",
+    furnitureShelf: "Shelf",
+    furnitureCounter: "Counter",
+    furnitureBoard: "Class board",
+    furnitureLocker: "Locker",
+    furnitureWorkstation: "Workstation",
+    furnitureMachine: "Workshop equipment",
+    furnitureKitchen: "Kitchen unit",
+    furniturePlant: "Plant pot",
     natureTitle: "Outdoor area",
     treeInfo: "Decorative tree · blocks movement",
     rockInfo: "Decorative rock · blocks movement",
@@ -141,6 +169,34 @@ const translations = {
     interiorHallName: "Hall d’entrée",
     interiorMainName: "Salon",
     interiorSideName: "Réserve",
+    buildingTypeHouse: "Maison",
+    buildingTypeApartment: "Immeuble d’habitation",
+    buildingTypeSchool: "École",
+    buildingTypeShop: "Commerce",
+    buildingTypeOffice: "Bureau",
+    buildingTypeIndustrial: "Bâtiment industriel",
+    buildingTypeOther: "Bâtiment non classé",
+    interiorDataSource: "Emprise du bâtiment cartographiée · Balises OpenStreetMap",
+    interiorGeneratedNote: "L’aménagement est généré selon la catégorie cartographiée ; ce n’est pas un plan intérieur relevé sur place.",
+    roomKitchen: "Cuisine",
+    roomBedroom: "Chambre",
+    roomClassroom: "Salle de classe",
+    roomCorridor: "Couloir",
+    roomShopFloor: "Espace de vente",
+    roomStock: "Réserve",
+    roomReception: "Accueil",
+    roomWorkspace: "Espace de travail",
+    roomWorkshop: "Atelier",
+    furnitureBed: "Lit",
+    furnitureDesk: "Bureau",
+    furnitureShelf: "Étagère",
+    furnitureCounter: "Comptoir",
+    furnitureBoard: "Tableau de classe",
+    furnitureLocker: "Casier",
+    furnitureWorkstation: "Poste de travail",
+    furnitureMachine: "Équipement d’atelier",
+    furnitureKitchen: "Meuble de cuisine",
+    furniturePlant: "Pot de plante",
     natureTitle: "Espace extérieur",
     treeInfo: "Arbre décoratif · bloque le déplacement",
     rockInfo: "Rocher décoratif · bloque le déplacement",
@@ -167,6 +223,9 @@ let gameMode = false;
 let playerMarker: maplibregl.Marker | null = null;
 let virtualEntranceMarker: maplibregl.Marker | null = null;
 let selectedBuildingName = "";
+let selectedBuildingType: BuildingKind = "other";
+let selectedBuildingLevels = 1;
+let selectedBuildingTags: Record<string, unknown> = {};
 let activeZoneKey = "";
 let interiorPosition = { x: 2, y: 4 };
 let interiorLastDirection = "down";
@@ -710,18 +769,107 @@ function isBuildingCollision(lng: number, lat: number): boolean {
   });
 }
 
-const interiorObjects = [
-  { id: "chair", x: 2, y: 2, label: "interiorHallObject", glyph: "♜" },
-  { id: "sofa", x: 6, y: 2, label: "interiorSofa", glyph: "▰" },
-  { id: "table", x: 9, y: 2, label: "interiorTable", glyph: "▤" },
-  { id: "cabinet", x: 6, y: 5, label: "interiorCabinet", glyph: "▥" },
-  { id: "crate", x: 9, y: 5, label: "interiorCrate", glyph: "▣" },
-] as const;
+type BuildingKind = "house" | "apartment" | "school" | "shop" | "office" | "industrial" | "other";
+type InteriorObject = { id: string; x: number; y: number; label: string; glyph: string };
+type InteriorDoor = { id: string; x: number; y: number; room: string };
+let interiorObjects: InteriorObject[] = [];
+let interiorDoors: InteriorDoor[] = [];
 
-const interiorDoors = [
-  { id: "hall-door", x: 4, y: 3, room: "interiorHallName" },
-  { id: "storage-door", x: 7, y: 4, room: "interiorSideName" },
-] as const;
+function classifyBuilding(tags: Record<string, unknown>): BuildingKind {
+  const values = ["building", "class", "type", "amenity", "shop", "office", "name", "name_en"]
+    .map((key) => String(tags[key] ?? "").toLowerCase()).join(" ");
+  if (/school|college|university|kindergarten|education/.test(values)) return "school";
+  if (/apartments|residential|dormitory|flats/.test(values)) return "apartment";
+  if (/house|detached|semidetached_house|terrace|bungalow|villa/.test(values)) return "house";
+  if (/retail|commercial|supermarket|convenience|shop|bakery|clothes|pharmacy/.test(values)) return "shop";
+  if (/office|government|bank|administrative|company/.test(values)) return "office";
+  if (/industrial|warehouse|factory|manufacture|workshop/.test(values)) return "industrial";
+  return "other";
+}
+
+function buildingTypeLabel(kind: BuildingKind): string {
+  const key = ({
+    house: "buildingTypeHouse", apartment: "buildingTypeApartment", school: "buildingTypeSchool",
+    shop: "buildingTypeShop", office: "buildingTypeOffice", industrial: "buildingTypeIndustrial",
+    other: "buildingTypeOther",
+  } as const)[kind];
+  return translations[language][key];
+}
+
+function createInteriorForBuilding(kind: BuildingKind): void {
+  const layouts: Record<BuildingKind, { objects: InteriorObject[]; doors: InteriorDoor[] }> = {
+    house: {
+      objects: [
+        { id: "hall-chair", x: 2, y: 2, label: "interiorHallObject", glyph: "♜" },
+        { id: "sofa", x: 6, y: 2, label: "interiorSofa", glyph: "▰" },
+        { id: "kitchen", x: 9, y: 2, label: "furnitureKitchen", glyph: "▤" },
+        { id: "bed", x: 2, y: 5, label: "furnitureBed", glyph: "▰" },
+        { id: "table", x: 8, y: 5, label: "interiorTable", glyph: "▤" },
+      ],
+      doors: [{ id: "hall-door", x: 4, y: 3, room: "interiorHallName" }, { id: "bedroom-door", x: 7, y: 4, room: "roomBedroom" }],
+    },
+    apartment: {
+      objects: [
+        { id: "sofa", x: 6, y: 2, label: "interiorSofa", glyph: "▰" },
+        { id: "table", x: 9, y: 2, label: "interiorTable", glyph: "▤" },
+        { id: "bed", x: 2, y: 5, label: "furnitureBed", glyph: "▰" },
+        { id: "kitchen", x: 6, y: 5, label: "furnitureKitchen", glyph: "▤" },
+        { id: "cabinet", x: 9, y: 5, label: "interiorCabinet", glyph: "▥" },
+      ],
+      doors: [{ id: "hall-door", x: 4, y: 3, room: "interiorHallName" }, { id: "room-door", x: 7, y: 4, room: "roomBedroom" }],
+    },
+    school: {
+      objects: [
+        { id: "board", x: 6, y: 1, label: "furnitureBoard", glyph: "▤" },
+        { id: "desk-a", x: 6, y: 3, label: "furnitureDesk", glyph: "▰" },
+        { id: "desk-b", x: 8, y: 3, label: "furnitureDesk", glyph: "▰" },
+        { id: "desk-c", x: 6, y: 5, label: "furnitureDesk", glyph: "▰" },
+        { id: "locker", x: 2, y: 5, label: "furnitureLocker", glyph: "▥" },
+      ],
+      doors: [{ id: "class-door", x: 4, y: 3, room: "roomClassroom" }, { id: "corridor-door", x: 7, y: 4, room: "roomCorridor" }],
+    },
+    shop: {
+      objects: [
+        { id: "counter", x: 6, y: 2, label: "furnitureCounter", glyph: "▰" },
+        { id: "shelf-a", x: 9, y: 2, label: "furnitureShelf", glyph: "▥" },
+        { id: "shelf-b", x: 9, y: 5, label: "furnitureShelf", glyph: "▥" },
+        { id: "crate", x: 2, y: 5, label: "interiorCrate", glyph: "▣" },
+      ],
+      doors: [{ id: "shop-door", x: 4, y: 3, room: "roomShopFloor" }, { id: "stock-door", x: 7, y: 4, room: "roomStock" }],
+    },
+    office: {
+      objects: [
+        { id: "reception", x: 2, y: 2, label: "roomReception", glyph: "▰" },
+        { id: "desk-a", x: 6, y: 2, label: "furnitureWorkstation", glyph: "▤" },
+        { id: "desk-b", x: 9, y: 2, label: "furnitureWorkstation", glyph: "▤" },
+        { id: "cabinet", x: 6, y: 5, label: "interiorCabinet", glyph: "▥" },
+        { id: "plant", x: 9, y: 5, label: "furniturePlant", glyph: "♣" },
+      ],
+      doors: [{ id: "office-door", x: 4, y: 3, room: "roomWorkspace" }, { id: "meeting-door", x: 7, y: 4, room: "roomReception" }],
+    },
+    industrial: {
+      objects: [
+        { id: "machine-a", x: 2, y: 2, label: "furnitureMachine", glyph: "⚙" },
+        { id: "machine-b", x: 6, y: 2, label: "furnitureMachine", glyph: "⚙" },
+        { id: "crate-a", x: 9, y: 2, label: "interiorCrate", glyph: "▣" },
+        { id: "shelf", x: 6, y: 5, label: "furnitureShelf", glyph: "▥" },
+      ],
+      doors: [{ id: "workshop-door", x: 4, y: 3, room: "roomWorkshop" }, { id: "storage-door", x: 7, y: 4, room: "roomStock" }],
+    },
+    other: {
+      objects: [
+        { id: "chair", x: 2, y: 2, label: "interiorHallObject", glyph: "♜" },
+        { id: "sofa", x: 6, y: 2, label: "interiorSofa", glyph: "▰" },
+        { id: "table", x: 9, y: 2, label: "interiorTable", glyph: "▤" },
+        { id: "cabinet", x: 6, y: 5, label: "interiorCabinet", glyph: "▥" },
+        { id: "crate", x: 9, y: 5, label: "interiorCrate", glyph: "▣" },
+      ],
+      doors: [{ id: "hall-door", x: 4, y: 3, room: "interiorHallName" }, { id: "storage-door", x: 7, y: 4, room: "interiorSideName" }],
+    },
+  };
+  interiorObjects = layouts[kind].objects;
+  interiorDoors = layouts[kind].doors;
+}
 
 function interiorCellKey(x: number, y: number): string { return `${x},${y}`; }
 
@@ -775,9 +923,19 @@ function renderInterior(): void {
 }
 
 function interiorRoomForPosition(): string {
-  if (interiorPosition.x <= 3) return translations[language].interiorHallName;
-  if (interiorPosition.y >= 5) return translations[language].interiorSideName;
-  return translations[language].interiorMainName;
+  const labels: Record<BuildingKind, [string, string, string]> = {
+    house: ["interiorHallName", "interiorMainName", "roomBedroom"],
+    apartment: ["interiorHallName", "interiorMainName", "roomBedroom"],
+    school: ["roomCorridor", "roomClassroom", "roomClassroom"],
+    shop: ["roomShopFloor", "roomShopFloor", "roomStock"],
+    office: ["roomReception", "roomWorkspace", "roomWorkspace"],
+    industrial: ["roomWorkshop", "roomWorkshop", "roomStock"],
+    other: ["interiorHallName", "interiorMainName", "interiorSideName"],
+  };
+  const [left, mainRoom, side] = labels[selectedBuildingType];
+  if (interiorPosition.x <= 3) return translations[language][left as keyof typeof translations.en];
+  if (interiorPosition.y >= 5) return translations[language][side as keyof typeof translations.en];
+  return translations[language][mainRoom as keyof typeof translations.en];
 }
 
 function inspectInteriorObject(id: string): void {
@@ -822,9 +980,12 @@ function openBuildingInterior(): void {
   heldDirections.clear();
   interiorPosition = { x: 2, y: 4 };
   interiorLastDirection = "down";
-  $("#interior-building-name").textContent = selectedBuildingName;
-  $("#interior-title").textContent = translations[language].interiorTitle;
-  $("#interior-note").textContent = translations[language].interiorNote;
+  $("#interior-building-name").textContent = selectedBuildingName || buildingTypeLabel(selectedBuildingType);
+  $("#interior-title").textContent = `${buildingTypeLabel(selectedBuildingType)} · ${translations[language].interiorTitle}`;
+  $("#interior-note").textContent = translations[language].interiorGeneratedNote;
+  $("#interior-data-source").textContent = translations[language].interiorDataSource;
+  $("#interior-levels").textContent = `${selectedBuildingLevels} ${language === "fr" ? "niveau(x) cartographié(s)" : "mapped level(s)"}`;
+  createInteriorForBuilding(selectedBuildingType);
   $("#interior-controls").textContent = translations[language].interiorMove;
   $("#interior-message").textContent = translations[language].interiorInteract;
   $("#interior-exit").textContent = translations[language].closeInterior;
@@ -1167,8 +1328,11 @@ map.on("click", (event) => {
       ? map.queryRenderedFeatures(event.point, { layers: ["juju-game-buildings"] })[0]
       : undefined;
     if (building) {
-      const props = building.properties ?? {};
-      selectedBuildingName = String(props.name ?? props.name_en ?? translations[language].buildingFallback);
+      const props = (building.properties ?? {}) as Record<string, unknown>;
+      selectedBuildingTags = props;
+      selectedBuildingType = classifyBuilding(props);
+      selectedBuildingLevels = Math.max(1, Math.min(20, Number(props.render_height ? Math.round(Number(props.render_height) / 3) : props.levels ?? props["building:levels"] ?? 1) || 1));
+      selectedBuildingName = String(props.name ?? props.name_en ?? buildingTypeLabel(selectedBuildingType));
       virtualEntranceMarker?.remove();
       const entrance = document.createElement("button");
       entrance.type = "button";
