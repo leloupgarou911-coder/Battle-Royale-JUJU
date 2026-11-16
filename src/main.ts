@@ -571,6 +571,7 @@ function openSpawnPicker(): void {
   if (home) home.hidden = true;
   if (saves) saves.hidden = true;
   spawnSelectionMode = true;
+  document.querySelector<HTMLElement>("#app")?.classList.add("spawn-selecting");
   selectedSpawnCoordinates = null;
   spawnSelectionMarker?.remove();
   spawnSelectionMarker = null;
@@ -594,6 +595,7 @@ function openSpawnPicker(): void {
 
 function closeSpawnPicker(): void {
   spawnSelectionMode = false;
+  document.querySelector<HTMLElement>("#app")?.classList.remove("spawn-selecting");
   selectedSpawnCoordinates = null;
   spawnSelectionMarker?.remove();
   spawnSelectionMarker = null;
@@ -1427,7 +1429,7 @@ function updatePlayerNavigationHud(): void {
   const nearby = document.querySelector<HTMLElement>("#navigation-nearby-place");
   if (nearby) {
     const poiLayerReady = map.getLayer("juju-poi-points");
-    const candidates = poiLayerReady ? map.queryRenderedFeatures({ layers: ["juju-poi-points"] }) : [];
+    const candidates = poiLayerReady ? map.queryRenderedFeatures([[0, 0], [map.getCanvas().width, map.getCanvas().height]], { layers: ["juju-poi-points"] }) : [];
     const nearest = candidates.map((feature) => {
       if (feature.geometry.type !== "Point") return null;
       const coords = feature.geometry.coordinates as [number, number];
