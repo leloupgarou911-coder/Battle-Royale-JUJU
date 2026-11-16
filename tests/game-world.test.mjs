@@ -20,6 +20,8 @@ import { detectStreamingProfile } from "../src/game/streaming.ts";
 import { circlesOverlap, collisionSampleOffsets } from "../src/game/collisions.ts";
 import { circleIntersectsInteriorBox, interiorGroundHeight, TRAINING_BUILDING } from "../src/game/architecture.ts";
 import { getBuildingPrefab, inferBuildingPrefabKind, isRoomWithinLoadRadius } from "../src/game/buildingPrefabs.ts";
+import { generateBuildingPlan, isPlanWithinStreamingRadius, isValidSavedInterior } from "../src/game/buildingGenerator.ts";
+import { SpatialCollisionIndex } from "../src/game/collisions.ts";
 import { readFileSync } from "node:fs";
 import { translations } from "../src/i18n/translations.ts";
 
@@ -306,4 +308,48 @@ test("nearby room streaming checks distance and rejects invalid radii", () => {
   assert.equal(isRoomWithinLoadRadius(0, 0, 3, 4, 4.9), false);
   assert.equal(isRoomWithinLoadRadius(0, 0, 3, 4, -1), false);
   assert.equal(isRoomWithinLoadRadius(Number.NaN, 0, 0, 0, 5), false);
+});
+
+test("procedural building plans use mapped footprints and OSM floor metadata", () => {
+  const points = [{ x: 0, z: 0 }, { x: 12, z: 0 }, { x: 12, z: 10 }, { x: 0, z: 10 }, { x: 0, z: 0 }];
+  const plan = generateBuildingPlan({
+    points, sourceId: "way-42", tags: { "building:levels": "3" }, kind: "school",
+  });
+  assert.ok(plan);
+  assert.equal(plan.id, "way-42");
+  assert.equal(plan.kind, "school");
+  assert.equal(plan.floors, 3);
+  assert.equal(plan.rooms.length, 4);
+  assert.ok(plan.openings.some((opening) => opening.kind === "door"));
+  assert.ok(plan.openings.some((opening) => opening.kind === "window"));
+  assert.equal(plan.stair?.steps, 13);
+  assert.equal(generateBuildingPlan({ points: [{ x: 0, z: 0 }, { x: 1, z: 1 }], kind: "house" }), null);
+});
+
+test("procedural plans cap unsafe or missing floor counts and stream by distance", () => {
+  const points = [{ x: -5, z: -5 }, { x: 5, z: -5 }, { x: 5, z: 5 }, { x: -5, z: 5 }];
+  const plan = generateBuildingPlan({ points, tags: { levels: 99 }, kind: "office" });
+  assert.equal(plan?.floors, 5);
+  assert.equal(isPlanWithinStreamingRadius({ x: 0, z: 0 }, plan, 1), true);
+  assert.equal(isPlanWithinStreamingRadius({ x: 50, z: 50 }, plan, 10), false);
+});
+
+test("interior save records are validated before restoring a save slot", () => {
+  const valid = { buildingId: "way-42", floor: 1, x: 1, y: 3.2, z: -2, yaw: 0.4, inside: true, savedAt: 1000, outside: [0, 0, 0], doorOpen: true };
+  assert.equal(isValidSavedInterior(valid, 1200), true);
+  assert.equal(isValidSavedInterior({ ...valid, floor: 8 }, 1200), false);
+  assert.equal(isValidSavedInterior({ ...valid, x: Number.NaN }, 1200), false);
+  assert.equal(isValidSavedInterior({ ...valid, savedAt: 500 }, 1200, 100), false);
+});
+
+test("spatial collision index returns only nearby intersecting building bounds", () => {
+  const index = new SpatialCollisionIndex(10);
+  const near = { id: "near" };
+  const far = { id: "far" };
+  index.insert(near, { minX: 1, maxX: 4, minZ: 1, maxZ: 4 });
+  index.insert(far, { minX: 80, maxX: 95, minZ: 80, maxZ: 95 });
+  assert.deepEqual(index.query({ minX: 0, maxX: 5, minZ: 0, maxZ: 5 }), [near]);
+  assert.deepEqual(index.query({ minX: 70, maxX: 100, minZ: 70, maxZ: 100 }), [far]);
+  index.remove(near);
+  assert.equal(index.size, 1);
 });
