@@ -754,6 +754,9 @@ function setLanguage(next: Language): void {
   $("#game-player-status").textContent = translations[next].playerReady;
   $("#navigation-destination-label").textContent = next === "fr" ? "DESTINATION" : "DESTINATION";
   $("#game-clear-destination").textContent = next === "fr" ? "EFFACER" : "CLEAR";
+  $("#game-set-destination").textContent = next === "fr"
+    ? (destinationCoordinates ? "MODIFIER LA DESTINATION" : "DÉFINIR UNE DESTINATION")
+    : (destinationCoordinates ? "CHANGE DESTINATION" : "SET DESTINATION");
   $("#navigation-nearby-label").textContent = next === "fr" ? "POINT D’INTÉRÊT À PROXIMITÉ" : "NEARBY POINT OF INTEREST";
   if (!destinationCoordinates) $("#navigation-destination").textContent = next === "fr" ? "Aucune destination" : "No destination set";
   if (!lastNearbyPoiUpdateAt) $("#navigation-nearby-place").textContent = next === "fr" ? "Recherche des lieux proches…" : "Looking for nearby places…";
