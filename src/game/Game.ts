@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { circleIntersectsInteriorBox, interiorGroundHeight } from "./architecture.ts";
+import { classifyBuilding, createInteriorLayout } from "./interiors.ts";
+import { getBuildingPrefab, inferBuildingPrefabKind, isRoomWithinLoadRadius } from "./buildingPrefabs.ts";
 
 type PositionCallback = (x: number, z: number, lng: number, lat: number) => void;
 type MappedBuildingFeature = GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>;
@@ -48,6 +50,9 @@ export class Game {
   private demoDoorOpen = false;
   private exteriorReturnPosition = new THREE.Vector3();
   private interiorFloor = 0;
+  private activeInteriorKind: import("./interiors.ts").BuildingKind = "other";
+  private readonly streamedRoomGroups: { group: THREE.Group; x: number; z: number }[] = [];
+  private saveElapsed = 0;
 
 
   constructor(
@@ -73,6 +78,7 @@ export class Game {
     this.buildMappedRoads();
     this.buildMappedBuildings();
     this.buildPlayer();
+    this.restoreInteriorSession();
     this.camera.position.set(0, 5, 9);
     this.resize();
     window.addEventListener("resize", this.resize);
@@ -150,8 +156,12 @@ export class Game {
   private buildInteractiveArchitecture(): void {
     // Reusable fictional training-building prefab. It is deliberately separate
     // from OSM footprints: map data never supplies private indoor floor plans.
-    const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xc6bda9, roughness: 0.92 });
-    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x777e76, roughness: 0.96 });
+    const tags = this.worldData.buildings.map((feature) => (feature.properties ?? {}) as Record<string, unknown>);
+    this.activeInteriorKind = inferBuildingPrefabKind(tags, classifyBuilding);
+    const prefab = getBuildingPrefab(this.activeInteriorKind);
+    const layout = createInteriorLayout(this.activeInteriorKind);
+    const wallMaterial = new THREE.MeshStandardMaterial({ color: prefab.wallColor, roughness: 0.92 });
+    const floorMaterial = new THREE.MeshStandardMaterial({ color: prefab.floorColor, roughness: 0.96 });
     const trimMaterial = new THREE.MeshStandardMaterial({ color: 0x4d6267, roughness: 0.72 });
     const furnitureMaterial = new THREE.MeshStandardMaterial({ color: 0x856b50, roughness: 0.9 });
     const addBox = (parent: THREE.Object3D, name: string, x: number, y: number, z: number,
@@ -210,12 +220,40 @@ export class Game {
     addBox(this.interiorRoot, "interior-front-wall-left", -4.2, 2, -9.42, 4.2, 4, 0.25, wallMaterial, true);
     addBox(this.interiorRoot, "interior-front-wall-right", 4.2, 2, -9.42, 4.2, 4, 0.25, wallMaterial, true);
 
-    // A clear corridor, furniture and two room partitions.
+    // Fictional room divisions and furniture are selected from a reusable
+    // building catalogue using public OSM building tags, never private floor plans.
     addBox(this.interiorRoot, "interior-partition-a", -1.6, 1.45, -14.4, 0.18, 2.9, 5.4, wallMaterial, true);
     addBox(this.interiorRoot, "interior-partition-b", 1.8, 1.45, -18.0, 0.18, 2.9, 4.4, wallMaterial, true);
-    addBox(this.interiorRoot, "interior-sofa", -3.8, 0.55, -12.2, 2.1, 1.1, 0.9, furnitureMaterial, true);
-    addBox(this.interiorRoot, "interior-table", -3.8, 0.42, -16.2, 1.8, 0.84, 1.2, furnitureMaterial, true);
-    addBox(this.interiorRoot, "interior-cabinet", 3.9, 1.0, -18.6, 1.2, 2.0, 0.65, furnitureMaterial, true);
+    const roomAnchors = [
+      { x: -3.4, z: -12.2 }, { x: 3.4, z: -12.2 },
+      { x: -3.4, z: -17.8 }, { x: 3.4, z: -17.8 },
+    ];
+    const furnitureShapes: Record<string, [number, number, number]> = {
+      sofa: [1.8, 0.9, 0.8], bed: [1.8, 0.55, 1.25], table: [1.25, 0.75, 0.9],
+      kitchen: [1.5, 1.1, 0.65], cabinet: [0.8, 1.65, 0.55], locker: [0.8, 1.8, 0.55],
+      board: [2.0, 1.2, 0.12], desk: [1.2, 0.8, 0.7], counter: [1.8, 1.05, 0.7],
+      shelf: [0.75, 1.7, 0.45], crate: [0.8, 0.8, 0.8], machine: [1.1, 1.4, 1.0],
+      reception: [1.8, 1.0, 0.75], workstation: [1.2, 0.85, 0.7], plant: [0.55, 1.0, 0.55],
+      chair: [0.65, 0.9, 0.65], "hall-chair": [0.65, 0.9, 0.65],
+    };
+    const objectGroups = new Map<string, THREE.Group>();
+    layout.objects.forEach((item, index) => {
+      const roomIndex = index % roomAnchors.length;
+      const anchor = roomAnchors[roomIndex];
+      const roomGroup = objectGroups.get(`room-${roomIndex}`) ?? new THREE.Group();
+      if (!objectGroups.has(`room-${roomIndex}`)) {
+        roomGroup.name = `streamed-room-${roomIndex}`;
+        this.interiorRoot.add(roomGroup);
+        objectGroups.set(`room-${roomIndex}`, roomGroup);
+        this.streamedRoomGroups.push({ group: roomGroup, x: anchor.x, z: anchor.z });
+      }
+      const key = item.id.replace(/-(a|b|c|\d+)$/, "");
+      const shapeKey = key.includes("desk") ? "desk" : key;
+      const [sx, sy, sz] = furnitureShapes[shapeKey] ?? [0.9, 0.9, 0.75];
+      const x = anchor.x + (item.x - 6) * 0.18;
+      const z = anchor.z + (item.y - 4) * 0.16;
+      addBox(roomGroup, `interior-${item.id}`, x, sy / 2, z, sx, sy, sz, furnitureMaterial, true);
+    });
 
     // Walkable staircase: visible individual steps plus a continuous hidden ramp
     // for stable character grounding, with a landing and upper-floor platform.
@@ -233,7 +271,72 @@ export class Game {
     this.interiorRoot.add(ramp);
     addBox(this.interiorRoot, "interior-upper-floor", 0, 3.28, -10.85, 12.5, 0.18, 3.0, floorMaterial);
     addBox(this.interiorRoot, "interior-upper-back-rail", 0, 3.8, -12.25, 12.4, 1.0, 0.12, trimMaterial);
-    this.interactionPrompt.textContent = "Training building · E: open door";
+    this.interactionPrompt.textContent = `${this.activeInteriorKind} · ${prefab.rooms.join(" / ")} · E: open door`;
+  }
+
+  private getInteriorStorageKey(): string {
+    return `juju-world-3d-interior:${this.worldData.origin[0].toFixed(4)}:${this.worldData.origin[1].toFixed(4)}`;
+  }
+
+  private saveInteriorSession(): void {
+    try {
+      const state = {
+        version: 1,
+        inside: this.insideDemoBuilding,
+        floor: this.interiorFloor,
+        position: [this.player.position.x, this.player.position.y, this.player.position.z],
+        outside: [this.exteriorReturnPosition.x, this.exteriorReturnPosition.y, this.exteriorReturnPosition.z],
+        yaw: this.yaw,
+        doorOpen: this.demoDoorOpen,
+        kind: this.activeInteriorKind,
+        savedAt: Date.now(),
+      };
+      localStorage.setItem(this.getInteriorStorageKey(), JSON.stringify(state));
+    } catch {
+      // Private browsing or storage limits must never stop gameplay.
+    }
+  }
+
+  private restoreInteriorSession(): void {
+    try {
+      const raw = localStorage.getItem(this.getInteriorStorageKey());
+      if (!raw) return;
+      const state = JSON.parse(raw) as {
+        version?: number; inside?: boolean; floor?: number; position?: number[];
+        outside?: number[]; yaw?: number; doorOpen?: boolean; savedAt?: number;
+      };
+      if (state.version !== 1 || !Array.isArray(state.position) || state.position.length !== 3 ||
+          !state.position.every(Number.isFinite) || !Number.isFinite(state.savedAt) ||
+          Date.now() - Number(state.savedAt) > 30 * 24 * 60 * 60 * 1000 ||
+          Number(state.savedAt) > Date.now()) return;
+      this.player.position.set(state.position[0], state.position[1], state.position[2]);
+      this.yaw = Number.isFinite(state.yaw) ? Number(state.yaw) : 0;
+      this.demoDoorOpen = state.doorOpen === true;
+      this.exteriorDoor.rotation.y = this.demoDoorOpen ? -Math.PI / 2 : 0;
+      if (Array.isArray(state.outside) && state.outside.length === 3 && state.outside.every(Number.isFinite)) {
+        this.exteriorReturnPosition.set(state.outside[0], state.outside[1], state.outside[2]);
+      }
+      this.insideDemoBuilding = state.inside === true;
+      this.interiorFloor = state.floor === 1 ? 1 : 0;
+      if (this.insideDemoBuilding) {
+        this.interiorRoot.visible = true;
+        const ceiling = this.interiorRoot.getObjectByName("interior-ceiling");
+        if (ceiling) ceiling.visible = false;
+        const roof = this.scene.getObjectByName("training-building-roof");
+        if (roof) roof.visible = false;
+      }
+    } catch {
+      // Ignore malformed or unavailable local save data.
+    }
+  }
+
+  private updateRoomStreaming(): void {
+    if (!this.insideDemoBuilding) return;
+    for (const room of this.streamedRoomGroups) {
+      room.group.visible = isRoomWithinLoadRadius(
+        this.player.position.x, this.player.position.z, room.x, room.z, 13,
+      );
+    }
   }
 
   private groundHeightAt(x: number, z: number): number {
@@ -630,6 +733,9 @@ export class Game {
     this.animationFrame = requestAnimationFrame(this.animate);
     const delta = Math.min(this.clock.getDelta(), 0.05);
     this.updatePlayer(delta);
+    this.updateRoomStreaming();
+    this.saveElapsed += delta;
+    if (this.saveElapsed >= 1) { this.saveElapsed = 0; this.saveInteriorSession(); }
     this.updateCamera(delta);
     this.renderer.render(this.scene, this.camera);
     const lng = this.worldData.origin[0] + this.player.position.x / this.metersPerLongitude;
@@ -792,6 +898,7 @@ export class Game {
       }
     });
     this.renderer.dispose();
+    this.saveInteriorSession();
     this.interactionPrompt.remove();
     this.renderer.domElement.remove();
   }
