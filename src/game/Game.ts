@@ -186,10 +186,31 @@ export class Game {
       this.cameraObstacles.push(mesh);
       return mesh;
     };
+    const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x8fc7d4, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.58 });
+    const windowFrameMaterial = new THREE.MeshStandardMaterial({ color: 0x52666a, roughness: 0.8 });
+    const addWindowedSideWall = (parent: THREE.Object3D, name: string, x: number, centerZ: number, depth: number, thickness: number, material: THREE.Material): void => {
+      const centers = [-17.1, -13.2];
+      const windowWidth = 2.0;
+      const minZ = centerZ - depth / 2;
+      const maxZ = centerZ + depth / 2;
+      let cursor = minZ;
+      centers.forEach((windowZ, index) => {
+        const leftEnd = windowZ - windowWidth / 2;
+        const segmentDepth = leftEnd - cursor;
+        if (segmentDepth > 0.05) addBox(parent, name + "-wall-" + index, x, 2, (cursor + leftEnd) / 2, thickness, 4, segmentDepth, material, true);
+        addBox(parent, name + "-sill-" + index, x, 0.82, windowZ, thickness, 1.64, windowWidth, material, true);
+        addBox(parent, name + "-lintel-" + index, x, 3.62, windowZ, thickness, 0.76, windowWidth, material, true);
+        addBox(parent, name + "-glass-" + index, x, 2.48, windowZ, thickness * 0.45, 1.62, windowWidth * 0.94, glassMaterial, true);
+        addBox(parent, name + "-frame-top-" + index, x, 3.32, windowZ, thickness * 1.25, 0.1, windowWidth + 0.12, windowFrameMaterial);
+        addBox(parent, name + "-frame-bottom-" + index, x, 1.64, windowZ, thickness * 1.25, 0.1, windowWidth + 0.12, windowFrameMaterial);
+        cursor = windowZ + windowWidth / 2;
+      });
+      if (maxZ - cursor > 0.05) addBox(parent, name + "-wall-end", x, 2, (cursor + maxZ) / 2, thickness, 4, maxZ - cursor, material, true);
+    };
 
     // Exterior shell: a real gap is left in the front wall for the hinged door.
-    addBox(this.scene, "training-building-left-wall", -6.8, 2, -15, 0.4, 4, 12, wallMaterial, true);
-    addBox(this.scene, "training-building-right-wall", 6.8, 2, -15, 0.4, 4, 12, wallMaterial, true);
+    addWindowedSideWall(this.scene, "training-building-left", -6.8, -15, 12, 0.4, wallMaterial);
+    addWindowedSideWall(this.scene, "training-building-right", 6.8, -15, 12, 0.4, wallMaterial);
     addBox(this.scene, "training-building-back-wall", 0, 2, -20.8, 13.2, 4, 0.4, wallMaterial, true);
     addBox(this.scene, "training-building-front-left", -4.1, 2, -9.2, 5.4, 4, 0.4, wallMaterial, true);
     addBox(this.scene, "training-building-front-right", 4.1, 2, -9.2, 5.4, 4, 0.4, wallMaterial, true);
@@ -215,17 +236,6 @@ export class Game {
     addBox(this.interiorRoot, "interior-floor", 0, 0, -15, 12.8, 0.18, 11.2, floorMaterial);
     const interiorCeiling = addBox(this.interiorRoot, "interior-ceiling", 0, 3.98, -15, 12.8, 0.16, 11.2, trimMaterial);
     interiorCeiling.castShadow = false;
-    const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x8fc7d4, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.58 });
-    const windowFrameMaterial = new THREE.MeshStandardMaterial({ color: 0x52666a, roughness: 0.8 });
-    for (const side of [-1, 1]) {
-      for (const z of [-13.2, -17.1]) {
-        addBox(this.interiorRoot, "interior-window-glass", side * 6.18, 2.45, z, 0.06, 1.35, 2.0, glassMaterial);
-        addBox(this.interiorRoot, "interior-window-sill", side * 6.12, 1.72, z, 0.18, 0.12, 2.15, windowFrameMaterial);
-        addBox(this.interiorRoot, "interior-window-header", side * 6.12, 3.18, z, 0.18, 0.12, 2.15, windowFrameMaterial);
-      }
-    }
-    addBox(this.interiorRoot, "interior-left-wall", -6.35, 2, -15, 0.25, 4, 11.2, wallMaterial, true);
-    addBox(this.interiorRoot, "interior-right-wall", 6.35, 2, -15, 0.25, 4, 11.2, wallMaterial, true);
     addBox(this.interiorRoot, "interior-back-wall", 0, 2, -20.55, 12.8, 4, 0.25, wallMaterial, true);
     addBox(this.interiorRoot, "interior-front-wall-left", -4.2, 2, -9.42, 4.2, 4, 0.25, wallMaterial, true);
     addBox(this.interiorRoot, "interior-front-wall-right", 4.2, 2, -9.42, 4.2, 4, 0.25, wallMaterial, true);
