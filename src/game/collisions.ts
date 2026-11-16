@@ -38,8 +38,11 @@ export class SpatialCollisionIndex<T> {
   private readonly cells = new Map<string, Set<T>>();
   private readonly boundsByItem = new Map<T, CollisionBounds>();
 
-  constructor(readonly cellSize = 32) {
+  readonly cellSize: number;
+
+  constructor(cellSize = 32) {
     if (!Number.isFinite(cellSize) || cellSize <= 0) throw new RangeError("cellSize must be positive");
+    this.cellSize = cellSize;
   }
 
   private key(x: number, z: number): string {
