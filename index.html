@@ -148,6 +148,18 @@
         </div>
       </section>
 
+      <section id="spawn-picker" class="spawn-picker-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="spawn-picker-title">
+        <div class="spawn-picker-panel">
+          <div class="spawn-picker-kicker">JUJU WORLD · NEW EXPLORATION</div>
+          <h2 id="spawn-picker-title">Choose your starting point</h2>
+          <p id="spawn-picker-help">Search for a city, or click anywhere on the map to place your starting marker.</p>
+          <div class="spawn-picker-location"><span>START LOCATION</span><strong id="spawn-picker-coordinates">Click the map to choose</strong></div>
+          <div class="spawn-picker-actions">
+            <button id="spawn-picker-cancel" type="button">CANCEL</button>
+            <button id="spawn-picker-confirm" type="button" disabled>START HERE</button>
+          </div>
+        </div>
+      </section>
       <section id="resume-session" class="resume-session" hidden data-i18n-aria="saveSlotsAria" aria-label="Saved game sessions">
         <strong data-i18n="saveSlotsTitle">SAVED EXPLORATIONS</strong>
         <p data-i18n="saveSlotsDescription">Choose a save to continue or create a new one.</p>
@@ -180,14 +192,6 @@
           <div id="mission-history" class="mission-history"></div>
         </section>
         <div class="game-hud-top"><span class="game-hud-brand">JUJU <b data-i18n="gameModeLabel">GAME MODE</b></span><span id="game-player-status">PLAYER READY</span></div>
-        <section class="game-mini-map-panel" data-i18n-aria="miniMapAriaLabel" aria-label="Navigation mini-map">
-          <div class="mini-map-heading"><strong data-i18n="miniMapTitle">MINI-MAP</strong><span data-i18n="miniMapPlayer">YOU</span></div>
-          <div class="mini-map-frame">
-            <div id="game-mini-map" aria-hidden="true"></div>
-            <div class="mini-map-player-marker" aria-hidden="true"><span></span></div>
-          </div>
-          <div id="mini-map-coordinates" class="mini-map-coordinates">0.000, 0.000</div>
-        </section>
         <div class="game-hud-stats"><div><small data-i18n="activeZoneLabel">ACTIVE ZONE</small><strong id="game-zone-status">ZONE READY</strong><span id="game-zone-coordinates">0.000, 0.000</span></div><div><small data-i18n="playerLabel">PLAYER</small><strong data-i18n="topDownLabel">TOP-DOWN</strong><span data-i18n="moveHelp">WASD / ARROWS TO MOVE</span></div><div><small data-i18n="streamingLabel">STREAMING</small><strong id="game-streaming-status">BALANCED</strong><span id="game-streaming-detail">Cache 49 · Ahead 2</span></div><div><small data-i18n="exploredZones">VISITED</small><strong id="game-explored-count">0</strong><span data-i18n="localLabel">LOCAL</span></div></div>
         <div class="game-speed-control">
           <label for="game-speed"><span data-i18n="movementSpeedLabel">MOVEMENT SPEED (m/s)</span> <strong id="game-speed-value">4.5</strong></label>
@@ -202,6 +206,14 @@
         <button id="game-clear-explored" class="game-clear-explored" type="button" data-i18n="clearExplored">CLEAR VISITED ZONES</button>
       </section>
 
+        <section class="game-mini-map-panel" data-i18n-aria="miniMapAriaLabel" aria-label="Navigation mini-map">
+          <div class="mini-map-heading"><strong data-i18n="miniMapTitle">MINI-MAP</strong><span data-i18n="miniMapPlayer">YOU</span></div>
+          <div class="mini-map-frame">
+            <div id="game-mini-map" aria-hidden="true"></div>
+            <div class="mini-map-player-marker" aria-hidden="true"><span></span></div>
+          </div>
+          <div id="mini-map-coordinates" class="mini-map-coordinates">0.000, 0.000</div>
+        </section>
       <section id="game-navigation" class="game-navigation" aria-label="Player navigation">
         <div class="game-navigation-top">
           <span class="navigation-live-dot"></span>
