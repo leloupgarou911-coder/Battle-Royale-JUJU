@@ -1769,7 +1769,7 @@ function startGameMode(resumeSession: SavedGameSession | null = null, requestedS
   clearPlayerDestination();
   travelledRouteCoordinates = [];
   lastRoutePoint = null;
-  playerHeading = "N";
+  playerHeading = "S";
   createMiniMap();
   heldDirections.clear();
   disableTerrain();
@@ -1805,6 +1805,7 @@ function startGameMode(resumeSession: SavedGameSession | null = null, requestedS
   const player = document.createElement("div");
   player.className = "juju-player is-idle";
   player.dataset.direction = "down";
+  player.dataset.heading = playerHeading;
   player.setAttribute("role", "img");
   player.setAttribute("aria-label", translations[language].playerAriaLabel);
   playerMarker?.remove();
