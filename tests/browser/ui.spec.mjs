@@ -49,7 +49,8 @@ test("home screen, French localization and settings render at this viewport", as
     await page.mouse.up();
   } else {
     const mapCanvas = page.locator("#map .maplibregl-canvas").first();
-    await mapCanvas.click({ position: { x: 200, y: 160 } });
+    // The navigation HUD overlays the canvas; focus it without a pointer click.
+    await mapCanvas.evaluate((canvas) => canvas.focus());
     await page.keyboard.down("w");
     await page.waitForTimeout(900);
     await page.keyboard.up("w");
