@@ -1020,3 +1020,85 @@ button:focus-visible,input:focus-visible{outline:2px solid #8fe2d9;outline-offse
   .game-mode .navigation-actions button { min-height:30px; }
   .game-mode .map-hint { bottom:10px; }
 }
+
+
+/* Spawn selection: the map itself becomes the starting-point picker. */
+.spawn-picker-overlay[hidden] { display: none !important; }
+.spawn-picker-overlay {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(3, 10, 16, .34);
+  pointer-events: none;
+}
+.spawn-picker-panel {
+  width: min(430px, calc(100vw - 32px));
+  padding: 20px;
+  border: 1px solid rgba(126, 224, 213, .42);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(10, 27, 38, .97), rgba(5, 15, 23, .97));
+  color: #edf8f7;
+  box-shadow: 0 22px 70px rgba(0,0,0,.42);
+  pointer-events: auto;
+  backdrop-filter: blur(18px);
+}
+.spawn-picker-kicker { color: #85dcd2; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
+.spawn-picker-panel h2 { margin: 10px 0 7px; font: 700 clamp(20px,3vw,27px) "Space Grotesk",sans-serif; }
+.spawn-picker-panel p { margin: 0; color: #a8bac2; font-size: 12px; line-height: 1.6; }
+.spawn-picker-location { display: grid; gap: 5px; margin: 16px 0; padding: 11px 12px; border: 1px solid rgba(255,255,255,.1); border-radius: 9px; background: rgba(255,255,255,.04); }
+.spawn-picker-location span { color: #83a3ad; font-size: 8px; font-weight: 800; letter-spacing: .13em; }
+.spawn-picker-location strong { color: #eaf8f5; font: 700 12px "DM Sans",sans-serif; font-variant-numeric: tabular-nums; }
+.spawn-picker-actions { display: flex; justify-content: flex-end; gap: 9px; }
+.spawn-picker-actions button { min-height: 40px; padding: 0 14px; border: 1px solid rgba(255,255,255,.15); border-radius: 8px; background: rgba(255,255,255,.05); color: #c6d7dc; font-size: 9px; font-weight: 800; letter-spacing: .08em; cursor: pointer; }
+.spawn-picker-actions #spawn-picker-confirm { border-color: rgba(122,224,211,.55); background: linear-gradient(100deg,#78d9d0,#a4eee2); color: #08202a; }
+.spawn-picker-actions #spawn-picker-confirm:disabled { opacity: .38; cursor: not-allowed; }
+.spawn-preview-marker { width: 30px; height: 30px; border: 3px solid #fff; border-radius: 50% 50% 50% 8px; background: #e7ad68; box-shadow: 0 0 0 7px rgba(231,173,104,.25), 0 4px 15px rgba(0,0,0,.6); transform: rotate(-45deg); }
+.game-mini-map-panel { display: none; }
+.game-mode .game-mini-map-panel {
+  position: fixed;
+  z-index: 9;
+  top: 18px;
+  right: 18px;
+  display: flex;
+  width: 218px;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid rgba(143, 220, 213, .38);
+  border-radius: 13px;
+  background: rgba(7, 20, 29, .93);
+  box-shadow: 0 12px 34px rgba(0,0,0,.35);
+  backdrop-filter: blur(14px);
+}
+.game-mode .mini-map-frame { height: 164px; }
+.game-mode .mini-map-player-marker { border-color: #fff; background: #08242e; }
+.game-mode .mini-map-player-marker::before { height: 35px; background: #fff; }
+.game-mode .mini-map-player-marker::after { width: 35px; background: #fff; }
+.game-mode .mini-map-player-marker[data-heading="NE"] { transform: translate(-50%,-50%) rotate(45deg); }
+.game-mode .mini-map-player-marker[data-heading="E"] { transform: translate(-50%,-50%) rotate(90deg); }
+.game-mode .mini-map-player-marker[data-heading="SE"] { transform: translate(-50%,-50%) rotate(135deg); }
+.game-mode .mini-map-player-marker[data-heading="S"] { transform: translate(-50%,-50%) rotate(180deg); }
+.game-mode .mini-map-player-marker[data-heading="SW"] { transform: translate(-50%,-50%) rotate(225deg); }
+.game-mode .mini-map-player-marker[data-heading="W"] { transform: translate(-50%,-50%) rotate(270deg); }
+.game-mode .mini-map-player-marker[data-heading="NW"] { transform: translate(-50%,-50%) rotate(315deg); }
+.game-mode .game-hud {
+  top: auto;
+  right: auto;
+  bottom: 18px;
+  left: 18px;
+  width: min(610px, calc(100vw - 260px));
+  max-height: min(48dvh, 390px);
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+  grid-template-areas: "top top" "stats stats" "progress missions" "speed touch" "actions actions" "clear clear";
+}
+.game-mode .game-navigation { display: none; }
+@media (max-width: 760px) {
+  .game-mode .game-mini-map-panel { top: 10px; right: 10px; width: 154px; padding: 7px; }
+  .game-mode .mini-map-frame { height: 112px; }
+  .game-mode .game-hud { left: 10px; bottom: 10px; width: min(430px, calc(100vw - 20px)); max-height: 43dvh; }
+  .spawn-picker-overlay { align-items: start; padding-top: 18px; }
+  .spawn-picker-panel { width: min(390px, calc(100vw - 24px)); }
+}
