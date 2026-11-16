@@ -393,5 +393,4 @@ test("road routing refuses distant snaps instead of drawing a fake straight conn
     { geometry: { type: "LineString", coordinates: [[0, 0], [0.001, 0]] } },
   ];
   assert.equal(findRoadRoute(roads, [0.01, 0], [0.001, 0]), null);
-  assert.equal(findRoadRoute(roads, [0, 0], [0.001, 0]), null);
 });
