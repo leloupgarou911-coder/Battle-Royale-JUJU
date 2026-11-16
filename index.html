@@ -201,6 +201,28 @@
           <button id="game-3d-toggle" type="button">ENTER 3D PROTOTYPE</button></div>
         <button id="game-clear-explored" class="game-clear-explored" type="button" data-i18n="clearExplored">CLEAR VISITED ZONES</button>
       </section>
+
+      <section id="game-navigation" class="game-navigation" aria-label="Player navigation">
+        <div class="game-navigation-top">
+          <span class="navigation-live-dot"></span>
+          <strong data-i18n="navigationTitle">PLAYER NAVIGATION</strong>
+          <span id="navigation-state" data-i18n="navigationFollowing">FOLLOWING</span>
+        </div>
+        <div class="navigation-position">
+          <span data-i18n="navigationCoordinates">PLAYER COORDINATES</span>
+          <strong id="navigation-coordinates">0.00000, 0.00000</strong>
+        </div>
+        <div class="navigation-readouts">
+          <div><span data-i18n="navigationHeading">HEADING</span><strong id="navigation-heading">N</strong></div>
+          <div><span data-i18n="navigationSpeed">SPEED</span><strong><b id="navigation-speed">4.5</b> m/s</strong></div>
+          <div><span data-i18n="navigationZoom">ZOOM</span><strong id="navigation-zoom">16.0×</strong></div>
+        </div>
+        <div class="navigation-actions">
+          <button id="game-map-zoom-out" type="button" aria-label="Zoom out">−</button>
+          <button id="game-map-recenter" type="button" data-i18n="navigationRecenter">CENTER PLAYER</button>
+          <button id="game-map-zoom-in" type="button" aria-label="Zoom in">+</button>
+        </div>
+      </section>
       <section id="game-3d-overlay" class="game-3d-overlay" hidden aria-label="JUJU WORLD 3D prototype">
         <header class="game-3d-toolbar">
           <div><strong data-i18n="game3dTitle">JUJU WORLD · 3D PROTOTYPE</strong><span data-i18n="game3dDescription">Fictional test environment — not yet connected to real map geometry</span></div>
