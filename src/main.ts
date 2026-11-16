@@ -1803,7 +1803,7 @@ function startGameMode(resumeSession: SavedGameSession | null = null, requestedS
   setGameWorldVisibility(true);
   updateGameZone(spawn.lng, spawn.lat);
   const player = document.createElement("div");
-  player.className = "juju-player";
+  player.className = "juju-player is-idle";
   player.dataset.direction = "down";
   player.setAttribute("role", "img");
   player.setAttribute("aria-label", translations[language].playerAriaLabel);
