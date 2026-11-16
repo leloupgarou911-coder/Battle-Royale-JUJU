@@ -22,6 +22,7 @@ import { circleIntersectsInteriorBox, interiorGroundHeight, TRAINING_BUILDING } 
 import { getBuildingPrefab, inferBuildingPrefabKind, isRoomWithinLoadRadius } from "../src/game/buildingPrefabs.ts";
 import { generateBuildingPlan, isPlanWithinStreamingRadius, isValidSavedInterior } from "../src/game/buildingGenerator.ts";
 import { SpatialCollisionIndex } from "../src/game/collisions.ts";
+import { findRoadRoute } from "../src/game/routing.ts";
 import { readFileSync } from "node:fs";
 import { translations } from "../src/i18n/translations.ts";
 
@@ -352,4 +353,36 @@ test("spatial collision index returns only nearby intersecting building bounds",
   assert.deepEqual(index.query({ minX: 70, maxX: 100, minZ: 70, maxZ: 100 }), [far]);
   index.remove(near);
   assert.equal(index.size, 1);
+});
+
+
+test("road routing follows connected road segments instead of a straight line", () => {
+  const roads = [
+    { geometry: { type: "LineString", coordinates: [[0, 0], [0.001, 0], [0.002, 0]] } },
+    { geometry: { type: "LineString", coordinates: [[0.001, 0], [0.001, 0.001], [0.002, 0.001], [0.002, 0]] } },
+  ];
+  const route = findRoadRoute(roads, [0, 0], [0.002, 0]);
+  assert.ok(route);
+  assert.deepEqual(route[0], [0, 0]);
+  assert.deepEqual(route.at(-1), [0.002, 0]);
+  assert.ok(route.length >= 3);
+  assert.equal(findRoadRoute([], [0, 0], [1, 1]), null);
+});
+
+test("road routing rejects disconnected road networks and malformed geometry", () => {
+  const roads = [
+    { geometry: { type: "LineString", coordinates: [[0, 0], [0.001, 0]] } },
+    { geometry: { type: "MultiLineString", coordinates: [[[1, 1], [1.001, 1]]] } },
+    { geometry: { type: "Polygon", coordinates: [] } },
+  ];
+  assert.equal(findRoadRoute(roads, [0, 0], [1, 1]), null);
+});
+
+test("saved sessions validate optional destination and travelled route", async () => {
+  const { isValidGameSession } = await import("../src/game/saves.ts");
+  const now = 2_000_000_000_000;
+  const base = { lng: 3.05, lat: 36.75, zoneX: 12, zoneY: 20, movementSpeed: 4.5, zoom: 16, savedAt: now - 1000 };
+  assert.equal(isValidGameSession({ ...base, destination: [3.1, 36.8], travelledRoute: [[3.05, 36.75], [3.06, 36.76]] }, now), true);
+  assert.equal(isValidGameSession({ ...base, destination: [500, 36.8] }, now), false);
+  assert.equal(isValidGameSession({ ...base, travelledRoute: Array.from({ length: 1801 }, () => [0, 0]) }, now), false);
 });
