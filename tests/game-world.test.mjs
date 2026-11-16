@@ -18,6 +18,7 @@ import { adjacentInteriorFloor, classifyBuilding, createInteriorLayout } from ".
 import { applyDailyMissionProgress, createDailyMissionState, emptyProgress, normalizeProgress, recordDiscoveredCity, recordDiscoveredZone, recordTravelDistance } from "../src/game/progression.ts";
 import { detectStreamingProfile } from "../src/game/streaming.ts";
 import { circlesOverlap, collisionSampleOffsets } from "../src/game/collisions.ts";
+import { circleIntersectsInteriorBox, interiorGroundHeight, TRAINING_BUILDING } from "../src/game/architecture.ts";
 import { readFileSync } from "node:fs";
 import { translations } from "../src/i18n/translations.ts";
 
@@ -258,4 +259,27 @@ test("staircase navigation never leaves the mapped floor range", () => {
   assert.equal(adjacentInteriorFloor(2, 3, -1), 1);
   assert.equal(adjacentInteriorFloor(0.5, 3, 1), null);
   assert.equal(adjacentInteriorFloor(0, 0, 1), null);
+});
+
+
+test("fictional interior stair height rises continuously from ground to upper floor", () => {
+  const bottom = interiorGroundHeight(4.5, TRAINING_BUILDING.stairBottomZ, 0);
+  const middle = interiorGroundHeight(4.5, -15.5, 0);
+  const top = interiorGroundHeight(4.5, TRAINING_BUILDING.stairTopZ, 0);
+  assert.equal(bottom, 0);
+  assert.ok(middle > 1.5 && middle < 1.8);
+  assert.equal(top, TRAINING_BUILDING.upperFloorHeight);
+});
+
+test("fictional interior has separate lower and upper floor heights", () => {
+  assert.equal(interiorGroundHeight(0, -15, 0), 0);
+  assert.equal(interiorGroundHeight(0, -10.5, 1), 3.2);
+  assert.equal(interiorGroundHeight(0, -10.5, 0), 0);
+  assert.equal(interiorGroundHeight(20, -10.5, 1), null);
+});
+
+test("interior furniture collision uses circle-to-box distance", () => {
+  const sofa = { x: -3.8, z: -12.2, halfX: 1.05, halfZ: 0.45 };
+  assert.equal(circleIntersectsInteriorBox(-3.8, -12.2, 0.62, sofa), true);
+  assert.equal(circleIntersectsInteriorBox(-1.8, -12.2, 0.62, sofa), false);
 });
