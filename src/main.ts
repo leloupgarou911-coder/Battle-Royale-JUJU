@@ -38,6 +38,7 @@ let playerMarker: maplibregl.Marker | null = null;
 let destinationMarker: maplibregl.Marker | null = null;
 let destinationCoordinates: [number, number] | null = null;
 let destinationSelectionMode = false;
+let lastNearbyPoiUpdateAt = 0;
 let travelledRouteCoordinates: [number, number][] = [];
 let lastRoutePoint: [number, number] | null = null;
 let virtualEntranceMarker: maplibregl.Marker | null = null;
@@ -1427,7 +1428,8 @@ function updatePlayerNavigationHud(): void {
     if (!destinationCoordinates && label) label.textContent = "Aucune destination";
   }
   const nearby = document.querySelector<HTMLElement>("#navigation-nearby-place");
-  if (nearby) {
+  if (nearby && Date.now() - lastNearbyPoiUpdateAt >= 1500) {
+    lastNearbyPoiUpdateAt = Date.now();
     const poiLayerReady = map.getLayer("juju-poi-points");
     const candidates = poiLayerReady ? map.queryRenderedFeatures([[0, 0], [map.getCanvas().width, map.getCanvas().height]], { layers: ["juju-poi-points"] }) : [];
     const nearest = candidates.map((feature) => {
