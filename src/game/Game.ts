@@ -39,6 +39,16 @@ export class Game {
   private readonly animatedLimbs: THREE.Group[] = [];
   private playerTorso: THREE.Mesh | null = null;
   private walkPhase = 0;
+  private readonly interiorColliders: { x: number; z: number; halfX: number; halfZ: number }[] = [];
+  private readonly interactionPrompt = document.createElement("div");
+  private readonly interiorRoot = new THREE.Group();
+  private readonly exteriorDoor = new THREE.Group();
+  private insideDemoBuilding = false;
+  private demoDoorOpen = false;
+  private exteriorReturnPosition = new THREE.Vector3();
+  private interiorFloor = 0;
+  private interactionMessage = "";
+
 
   constructor(
     private readonly container: HTMLElement,
@@ -58,6 +68,7 @@ export class Game {
     this.container.appendChild(this.renderer.domElement);
 
     this.buildWorld();
+    this.buildInteractiveArchitecture();
     this.buildMappedTerrain();
     this.buildMappedRoads();
     this.buildMappedBuildings();
@@ -69,6 +80,10 @@ export class Game {
     window.addEventListener("keyup", this.onKeyUp);
     document.addEventListener("pointerlockchange", this.onPointerLockChange);
     this.renderer.domElement.addEventListener("click", this.requestPointerLock);
+    this.interactionPrompt.className = "game-3d-interaction";
+    this.interactionPrompt.setAttribute("aria-live", "polite");
+    this.interactionPrompt.textContent = "Approach the training building door";
+    this.container.appendChild(this.interactionPrompt);
     this.renderer.domElement.addEventListener("wheel", this.onCameraWheel, { passive: false });
     document.addEventListener("mousemove", this.onMouseMove);
   }
@@ -130,6 +145,147 @@ export class Game {
     (grid.material as THREE.Material).opacity = 0.12;
     (grid.material as THREE.Material).transparent = true;
     this.scene.add(grid);
+  }
+
+  private buildInteractiveArchitecture(): void {
+    // Reusable fictional training-building prefab. It is deliberately separate
+    // from OSM footprints: map data never supplies private indoor floor plans.
+    const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xc6bda9, roughness: 0.92 });
+    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x777e76, roughness: 0.96 });
+    const trimMaterial = new THREE.MeshStandardMaterial({ color: 0x4d6267, roughness: 0.72 });
+    const furnitureMaterial = new THREE.MeshStandardMaterial({ color: 0x856b50, roughness: 0.9 });
+    const addBox = (parent: THREE.Object3D, name: string, x: number, y: number, z: number,
+      sx: number, sy: number, sz: number, material: THREE.Material, collider = false): THREE.Mesh => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), material);
+      mesh.position.set(x, y, z);
+      mesh.name = name;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      parent.add(mesh);
+      if (collider) this.interiorColliders.push({ x, z, halfX: sx / 2, halfZ: sz / 2 });
+      this.cameraObstacles.push(mesh);
+      return mesh;
+    };
+
+    // Exterior shell: a real gap is left in the front wall for the hinged door.
+    addBox(this.scene, "training-building-left-wall", -6.8, 2, -15, 0.4, 4, 12, wallMaterial, true);
+    addBox(this.scene, "training-building-right-wall", 6.8, 2, -15, 0.4, 4, 12, wallMaterial, true);
+    addBox(this.scene, "training-building-back-wall", 0, 2, -20.8, 13.2, 4, 0.4, wallMaterial, true);
+    addBox(this.scene, "training-building-front-left", -4.1, 2, -9.2, 5.4, 4, 0.4, wallMaterial, true);
+    addBox(this.scene, "training-building-front-right", 4.1, 2, -9.2, 5.4, 4, 0.4, wallMaterial, true);
+    addBox(this.scene, "training-building-floor", 0, -0.12, -15, 13.2, 0.24, 11.6, floorMaterial);
+    addBox(this.scene, "training-building-roof", 0, 4.12, -15, 13.6, 0.24, 12.4, trimMaterial);
+    const sign = addBox(this.scene, "training-building-sign", 0, 3.45, -8.94, 2.8, 0.42, 0.12, trimMaterial);
+    sign.castShadow = false;
+
+    // Door pivot is at its left edge; E opens/closes it, then enters.
+    this.exteriorDoor.position.set(-1.1, 0, -9.05);
+    const door = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.65, 0.16), trimMaterial);
+    door.position.set(1.1, 1.325, 0);
+    door.castShadow = true;
+    this.exteriorDoor.add(door);
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshStandardMaterial({ color: 0xe1c27b, metalness: 0.65 }));
+    knob.position.set(2.0, 1.3, -0.1);
+    this.exteriorDoor.add(knob);
+    this.scene.add(this.exteriorDoor);
+
+    // Interior geometry is built once and hidden until the player crosses the threshold.
+    this.interiorRoot.visible = false;
+    this.scene.add(this.interiorRoot);
+    addBox(this.interiorRoot, "interior-floor", 0, 0, -15, 12.8, 0.18, 11.2, floorMaterial);
+    addBox(this.interiorRoot, "interior-left-wall", -6.35, 2, -15, 0.25, 4, 11.2, wallMaterial, true);
+    addBox(this.interiorRoot, "interior-right-wall", 6.35, 2, -15, 0.25, 4, 11.2, wallMaterial, true);
+    addBox(this.interiorRoot, "interior-back-wall", 0, 2, -20.55, 12.8, 4, 0.25, wallMaterial, true);
+    addBox(this.interiorRoot, "interior-front-wall-left", -4.2, 2, -9.42, 4.2, 4, 0.25, wallMaterial, true);
+    addBox(this.interiorRoot, "interior-front-wall-right", 4.2, 2, -9.42, 4.2, 4, 0.25, wallMaterial, true);
+
+    // A clear corridor, furniture and two room partitions.
+    addBox(this.interiorRoot, "interior-partition-a", -1.6, 1.45, -14.4, 0.18, 2.9, 5.4, wallMaterial, true);
+    addBox(this.interiorRoot, "interior-partition-b", 1.8, 1.45, -18.0, 0.18, 2.9, 4.4, wallMaterial, true);
+    addBox(this.interiorRoot, "interior-sofa", -3.8, 0.55, -12.2, 2.1, 1.1, 0.9, furnitureMaterial, true);
+    addBox(this.interiorRoot, "interior-table", -3.8, 0.42, -16.2, 1.8, 0.84, 1.2, furnitureMaterial, true);
+    addBox(this.interiorRoot, "interior-cabinet", 3.9, 1.0, -18.6, 1.2, 2.0, 0.65, furnitureMaterial, true);
+
+    // Walkable staircase: visible individual steps plus a continuous hidden ramp
+    // for stable character grounding, with a landing and upper-floor platform.
+    const stairMaterial = new THREE.MeshStandardMaterial({ color: 0x9b896d, roughness: 0.9 });
+    const steps = 12;
+    for (let i = 0; i < steps; i += 1) {
+      const y = ((i + 1) / steps) * 3.2;
+      const z = -19.0 + (i + 0.5) * (7.0 / steps);
+      addBox(this.interiorRoot, "interior-stair-step", 4.55, y / 2, z, 2.0, y, 7.0 / steps, stairMaterial);
+    }
+    const ramp = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.12, 7.1), stairMaterial);
+    ramp.position.set(4.55, 1.6, -15.5);
+    ramp.rotation.x = -Math.atan2(3.2, 7.0);
+    ramp.visible = false;
+    this.interiorRoot.add(ramp);
+    addBox(this.interiorRoot, "interior-upper-floor", 0, 3.28, -10.85, 12.5, 0.18, 3.0, floorMaterial);
+    addBox(this.interiorRoot, "interior-upper-back-rail", 0, 3.8, -12.25, 12.4, 1.0, 0.12, trimMaterial);
+    this.interactionPrompt.textContent = "Training building · E: open door";
+  }
+
+  private groundHeightAt(x: number, z: number): number {
+    if (!this.insideDemoBuilding) return this.terrainHeightAt(x, z);
+    if (z > -12.15) return this.interiorFloor === 1 ? 3.2 : 0;
+    if (x > 3.55 && x < 5.55 && z >= -19.1 && z <= -12.15) {
+      return THREE.MathUtils.clamp((-12.15 - z) / 6.95, 0, 1) * 3.2;
+    }
+    return 0;
+  }
+
+  private updateInteraction(): void {
+    if (this.insideDemoBuilding) {
+      const atExit = Math.hypot(this.player.position.x, this.player.position.z + 9.0) < 2.1;
+      const atStairs = this.player.position.x > 3.2 && this.player.position.z < -12.0;
+      this.interactionPrompt.textContent = atExit
+        ? "E · Leave building"
+        : atStairs
+          ? (this.interiorFloor === 1 ? "Stairs · E: return downstairs" : "Stairs · walk up to the upper floor")
+          : "Fictional interior · E near the entrance to leave";
+      return;
+    }
+    const nearDoor = Math.hypot(this.player.position.x, this.player.position.z + 8.6) < 2.2;
+    this.interactionPrompt.textContent = nearDoor
+      ? (this.demoDoorOpen ? "E · Enter training building" : "E · Open door")
+      : "Explore the 3D area · approach the training building";
+  }
+
+  private interact(): void {
+    if (!this.insideDemoBuilding) {
+      const nearDoor = Math.hypot(this.player.position.x, this.player.position.z + 8.6) < 2.2;
+      if (!nearDoor) return;
+      if (!this.demoDoorOpen) {
+        this.demoDoorOpen = true;
+        this.exteriorDoor.rotation.y = -Math.PI / 2;
+        this.interactionPrompt.textContent = "Door open · press E to enter";
+        return;
+      }
+      this.exteriorReturnPosition.copy(this.player.position);
+      this.insideDemoBuilding = true;
+      this.interiorRoot.visible = true;
+      this.player.position.set(0, 0, -10.5);
+      this.verticalVelocity = 0;
+      this.interiorFloor = 0;
+      this.yaw = 0;
+      return;
+    }
+
+    const nearExit = Math.hypot(this.player.position.x, this.player.position.z + 9.0) < 2.1;
+    if (nearExit) {
+      this.insideDemoBuilding = false;
+      this.interiorRoot.visible = false;
+      this.player.position.copy(this.exteriorReturnPosition);
+      this.verticalVelocity = 0;
+      this.demoDoorOpen = false;
+      this.exteriorDoor.rotation.y = 0;
+      this.interiorFloor = 0;
+      return;
+    }
+    if (this.player.position.x > 3.2 && this.player.position.z > -12.8 && this.interiorFloor === 1) {
+      this.interiorFloor = 0;
+      this.player.position.y = 0;
+    }
   }
 
   private geographicToLocal(lng: number, lat: number): [number, number] {
@@ -291,6 +447,11 @@ export class Game {
           !building.rings.slice(1).some((hole) => this.isInsideLocalRing(sampleX, sampleZ, hole));
       });
       if (touchesSolid) return true;
+    }
+    for (const box of this.interiorColliders) {
+      const nearestX = THREE.MathUtils.clamp(x, box.x - box.halfX, box.x + box.halfX);
+      const nearestZ = THREE.MathUtils.clamp(z, box.z - box.halfZ, box.z + box.halfZ);
+      if (Math.hypot(x - nearestX, z - nearestZ) < radius) return true;
     }
     for (const obstacle of this.obstacleColliders) {
       const combined = radius + obstacle.radius;
@@ -464,9 +625,9 @@ export class Game {
   };
 
   private updatePlayer(delta: number): void {
-    const grounded = this.player.position.y <= this.terrainHeightAt(this.player.position.x, this.player.position.z) + 0.035;
+    const grounded = this.player.position.y <= this.groundHeightAt(this.player.position.x, this.player.position.z) + 0.035;
     if (grounded) {
-      this.player.position.y = this.terrainHeightAt(this.player.position.x, this.player.position.z);
+      this.player.position.y = this.groundHeightAt(this.player.position.x, this.player.position.z);
       this.verticalVelocity = 0;
       if (this.keys.has(" ") || this.keys.has("space")) {
         this.verticalVelocity = this.jumpImpulse;
@@ -476,7 +637,7 @@ export class Game {
     } else {
       this.verticalVelocity -= this.gravity * delta;
       this.player.position.y += this.verticalVelocity * delta;
-      const groundY = this.terrainHeightAt(this.player.position.x, this.player.position.z);
+      const groundY = this.groundHeightAt(this.player.position.x, this.player.position.z);
       if (this.player.position.y <= groundY) {
         this.player.position.y = groundY;
         this.verticalVelocity = 0;
@@ -497,10 +658,11 @@ export class Game {
       this.direction.normalize();
       const dx = this.direction.x * speed * delta;
       const dz = this.direction.z * speed * delta;
-      const currentGround = this.terrainHeightAt(this.player.position.x, this.player.position.z);
+      const currentGround = this.groundHeightAt(this.player.position.x, this.player.position.z);
       const canStepTo = (x: number, z: number): boolean => {
         if (this.collidesWithEnvironment(x, z)) return false;
-        const nextGround = this.terrainHeightAt(x, z);
+        if (this.insideDemoBuilding && (x < -6.0 || x > 6.0 || z < -20.2 || z > -9.2)) return false;
+        const nextGround = this.groundHeightAt(x, z);
         // Walk up gentle slopes and small steps; steep faces need a jump.
         return nextGround - currentGround <= this.maxStepHeight;
       };
@@ -510,13 +672,13 @@ export class Game {
       if (canStepTo(nextX, this.player.position.z)) this.player.position.x = nextX;
       if (canStepTo(this.player.position.x, nextZ)) this.player.position.z = nextZ;
       if (grounded && this.verticalVelocity === 0) {
-        const targetGround = this.terrainHeightAt(this.player.position.x, this.player.position.z);
+        const targetGround = this.groundHeightAt(this.player.position.x, this.player.position.z);
         this.player.position.y = Math.max(this.player.position.y, targetGround);
       }
     }
     this.player.position.x = THREE.MathUtils.clamp(this.player.position.x, -145, 145);
     this.player.position.z = THREE.MathUtils.clamp(this.player.position.z, -145, 145);
-    const floor = this.terrainHeightAt(this.player.position.x, this.player.position.z);
+    const floor = this.groundHeightAt(this.player.position.x, this.player.position.z);
     if (this.player.position.y < floor) {
       this.player.position.y = floor;
       this.verticalVelocity = 0;
@@ -525,6 +687,12 @@ export class Game {
       this.walkPhase += delta * (this.keys.has("shift") ? 13 : 8);
       this.player.rotation.y = Math.atan2(this.direction.x, this.direction.z);
     }
+    if (this.insideDemoBuilding && this.player.position.z > -12.15 && this.player.position.x < 3.0) {
+      this.interiorFloor = 1;
+    } else if (this.insideDemoBuilding && this.player.position.z < -13.0) {
+      this.interiorFloor = 0;
+    }
+    this.updateInteraction();
     const airborne = this.player.position.y > floor + 0.08;
     const swing = isMoving && !airborne ? Math.sin(this.walkPhase) * (this.keys.has("shift") ? 0.72 : 0.48) : 0;
     this.animatedLimbs.forEach((limb, index) => {
@@ -566,6 +734,7 @@ export class Game {
   private onKeyDown = (event: KeyboardEvent): void => {
     const key = event.key.toLowerCase();
     if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) event.preventDefault();
+    if (key === "e" && !event.repeat) this.interact();
     this.keys.add(key);
   };
 
@@ -610,6 +779,7 @@ export class Game {
       }
     });
     this.renderer.dispose();
+    this.interactionPrompt.remove();
     this.renderer.domElement.remove();
   }
 }
