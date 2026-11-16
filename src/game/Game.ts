@@ -48,6 +48,7 @@ export class Game {
   private readonly exteriorDoor = new THREE.Group();
   private insideDemoBuilding = false;
   private demoDoorOpen = false;
+  private doorTargetAngle = 0;
   private exteriorReturnPosition = new THREE.Vector3();
   private interiorFloor = 0;
   private activeInteriorKind: import("./interiors.ts").BuildingKind = "other";
@@ -312,7 +313,8 @@ export class Game {
       this.player.position.set(state.position[0], state.position[1], state.position[2]);
       this.yaw = Number.isFinite(state.yaw) ? Number(state.yaw) : 0;
       this.demoDoorOpen = state.doorOpen === true;
-      this.exteriorDoor.rotation.y = this.demoDoorOpen ? -Math.PI / 2 : 0;
+      this.doorTargetAngle = this.demoDoorOpen ? -Math.PI / 2 : 0;
+      this.exteriorDoor.rotation.y = this.doorTargetAngle;
       if (Array.isArray(state.outside) && state.outside.length === 3 && state.outside.every(Number.isFinite)) {
         this.exteriorReturnPosition.set(state.outside[0], state.outside[1], state.outside[2]);
       }
@@ -367,7 +369,7 @@ export class Game {
       if (!nearDoor) return;
       if (!this.demoDoorOpen) {
         this.demoDoorOpen = true;
-        this.exteriorDoor.rotation.y = -Math.PI / 2;
+        this.doorTargetAngle = -Math.PI / 2;
         this.interactionPrompt.textContent = "Door open · press E to enter";
         return;
       }
@@ -396,7 +398,7 @@ export class Game {
       this.player.position.copy(this.exteriorReturnPosition);
       this.verticalVelocity = 0;
       this.demoDoorOpen = false;
-      this.exteriorDoor.rotation.y = 0;
+      this.doorTargetAngle = 0;
       this.interiorFloor = 0;
       return;
     }
@@ -733,6 +735,7 @@ export class Game {
     this.animationFrame = requestAnimationFrame(this.animate);
     const delta = Math.min(this.clock.getDelta(), 0.05);
     this.updatePlayer(delta);
+    this.exteriorDoor.rotation.y = THREE.MathUtils.damp(this.exteriorDoor.rotation.y, this.doorTargetAngle, 9, delta);
     this.updateRoomStreaming();
     this.saveElapsed += delta;
     if (this.saveElapsed >= 1) { this.saveElapsed = 0; this.saveInteriorSession(); }
