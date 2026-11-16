@@ -39,6 +39,13 @@ test("home screen, French localization and settings render at this viewport", as
   await expect(page.locator("#game-mini-map .maplibregl-canvas")).toBeVisible({ timeout: 20_000 });
   await expect(page.locator("#game-mini-map")).toHaveAttribute("data-tiles-ready", "true", { timeout: 30_000 });
   await expect(page.locator("#game-zone-status")).not.toContainText(/CHARGEMENT|LOADING/, { timeout: 30_000 });
+  await expect(page.locator(".juju-player")).toBeVisible();
+  const initialCoordinates = await page.locator("#navigation-coordinates").textContent();
+  await page.keyboard.down("w");
+  await page.waitForTimeout(900);
+  await page.keyboard.up("w");
+  await expect(page.locator("#navigation-coordinates")).not.toHaveText(initialCoordinates);
+  await expect(page.locator(".juju-player")).toHaveClass(/is-idle/);
   await page.locator(".game-hud").screenshot({ path: testInfo.outputPath("game-hud.png"), animations: "disabled" });
   await page.locator("#game-set-destination").click();
   await page.locator("#map").click({ position: { x: Math.round(viewport.width * 0.72), y: Math.round(viewport.height * 0.48) } });
