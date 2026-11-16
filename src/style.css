@@ -964,3 +964,59 @@ button:focus-visible,input:focus-visible{outline:2px solid #8fe2d9;outline-offse
 @media (max-width: 600px) {
   .game-3d-interaction { bottom: 10px; font-size: 10px; }
 }
+
+
+/* Player-first navigation layer: the world map and every readout follow the player. */
+.game-navigation {
+  display: none;
+  position: fixed;
+  z-index: 8;
+  top: 16px;
+  left: 16px;
+  width: min(292px, calc(100vw - 410px));
+  padding: 13px;
+  border: 1px solid rgba(117, 224, 214, .32);
+  border-radius: 14px;
+  color: #eaf8f7;
+  background: linear-gradient(145deg, rgba(7, 22, 31, .94), rgba(8, 16, 25, .88));
+  box-shadow: 0 18px 55px rgba(0,0,0,.38), inset 0 1px rgba(255,255,255,.045);
+  backdrop-filter: blur(18px);
+  pointer-events: auto;
+}
+.game-mode .game-navigation { display: grid; gap: 11px; }
+.game-navigation-top { display:flex; align-items:center; gap:8px; color:#9be7df; font-size:9px; letter-spacing:.13em; }
+.game-navigation-top strong { font-size:9px; }
+.navigation-live-dot { width:7px;height:7px;border-radius:50%;background:#7de0b2;box-shadow:0 0 12px #7de0b2; }
+#navigation-state { margin-left:auto;color:#82d8b6;font-size:8px; }
+.navigation-position { display:grid; gap:5px; padding:10px 0 9px; border-top:1px solid rgba(143,196,201,.13); border-bottom:1px solid rgba(143,196,201,.13); }
+.navigation-position span,.navigation-readouts span { color:#829da8;font-size:7px;font-weight:800;letter-spacing:.14em; }
+.navigation-position strong { color:#f2fbfa;font:600 17px "Space Grotesk",sans-serif;letter-spacing:.015em;font-variant-numeric:tabular-nums; }
+.navigation-readouts { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px; }
+.navigation-readouts>div { display:grid;gap:5px;padding:8px;border:1px solid rgba(143,196,201,.1);border-radius:8px;background:rgba(255,255,255,.025); }
+.navigation-readouts strong { color:#b8f0e9;font:700 12px "Space Grotesk",sans-serif;font-variant-numeric:tabular-nums; }
+.navigation-readouts strong b { font:inherit; }
+.navigation-actions { display:grid;grid-template-columns:38px 1fr 38px;gap:7px; }
+.navigation-actions button { min-height:34px;border:1px solid rgba(120,217,208,.27);border-radius:8px;background:rgba(120,217,208,.08);color:#c5f3ed;font:800 11px "DM Sans",sans-serif;cursor:pointer; }
+.navigation-actions button:hover { border-color:rgba(120,217,208,.65);background:rgba(120,217,208,.16); }
+.navigation-actions #game-map-recenter { color:#10252a;background:linear-gradient(110deg,#a1e9df,#68c9c2);border-color:#a1e9df;font-size:8px;letter-spacing:.08em; }
+.game-mode .juju-player {
+  width:30px;height:38px;border-radius:13px 13px 10px 10px;
+  background:linear-gradient(145deg,#fff0b8 0%,#f0b45e 46%,#c9783e 100%);
+  box-shadow:0 0 0 2px rgba(8,24,31,.9),0 0 0 5px rgba(117,224,214,.48),0 0 22px rgba(117,224,214,.52),0 7px 18px rgba(0,0,0,.65);
+}
+.game-mode .juju-player::before { border-color:#f7ffff;background:#ffe0b1; }
+.game-mode .juju-player::after { background:#183844; }
+.game-mode #map .maplibregl-canvas { filter:saturate(1.18) contrast(1.07) brightness(.94); }
+.game-mode .map-hint { border-color:rgba(120,217,208,.24); }
+@media(max-width:900px) {
+  .game-navigation { top:10px;left:10px;width:min(250px,calc(100vw - 390px));padding:10px; }
+  .navigation-position strong { font-size:14px; }
+}
+@media(max-width:760px) {
+  .game-mode .game-navigation { top:auto;left:10px;bottom:64px;width:min(250px,calc(100vw - 20px));padding:9px;gap:8px; }
+  .game-mode .navigation-position { padding:7px 0; }
+  .game-mode .navigation-position strong { font-size:13px; }
+  .game-mode .navigation-readouts>div { padding:6px; }
+  .game-mode .navigation-actions button { min-height:30px; }
+  .game-mode .map-hint { bottom:10px; }
+}
