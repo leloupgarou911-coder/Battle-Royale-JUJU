@@ -25,17 +25,17 @@ function lineParts(feature: RoadFeature): Coordinate[][] {
   return lines.filter((line) => line.length >= 2);
 }
 
-function nearestNode(nodes: Map<string, Coordinate>, point: Coordinate): string | null {
+function nearestNode(nodes: Map<string, Coordinate>, point: Coordinate, maxSnapMeters = 120): string | null {
   let best: string | null = null;
   let bestDistance = Infinity;
   for (const [key, coordinate] of nodes) {
     const distance = haversineDistance({ lng: point[0], lat: point[1] }, { lng: coordinate[0], lat: coordinate[1] });
     if (distance < bestDistance) { bestDistance = distance; best = key; }
   }
-  return bestDistance <= 1800 ? best : null;
+  return bestDistance <= maxSnapMeters ? best : null;
 }
 
-/** Finds a shortest path along currently loaded OSM road segments. Returns null when local coverage is insufficient. */
+/** Finds a shortest path along connected, currently loaded OSM road segments. Snapping is deliberately local to avoid false cross-city connectors. */
 export function findRoadRoute(features: RoadFeature[], start: Coordinate, end: Coordinate, maxSegments = 4500): Coordinate[] | null {
   if (!Array.isArray(features) || features.length === 0) return null;
   const nodes = new Map<string, Coordinate>();
@@ -58,7 +58,7 @@ export function findRoadRoute(features: RoadFeature[], start: Coordinate, end: C
     }
     if (segments >= maxSegments) break;
   }
-  const source = nearestNode(nodes, start), target = nearestNode(nodes, end);
+  const source = nearestNode(nodes, start, 120), target = nearestNode(nodes, end, 120);
   if (!source || !target) return null;
   const distances = new Map<string, number>([[source, 0]]);
   const previous = new Map<string, string>();
