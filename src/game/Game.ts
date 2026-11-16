@@ -2,12 +2,14 @@ import * as THREE from "three";
 import { circleIntersectsInteriorBox, interiorGroundHeight } from "./architecture.ts";
 import { classifyBuilding, createInteriorLayout } from "./interiors.ts";
 import { getBuildingPrefab, inferBuildingPrefabKind, isRoomWithinLoadRadius } from "./buildingPrefabs.ts";
+import { generateBuildingPlan, isValidSavedInterior, type ProceduralBuildingPlan, type SavedInteriorProgress } from "./buildingGenerator.ts";
+import { SpatialCollisionIndex } from "./collisions.ts";
 
 type PositionCallback = (x: number, z: number, lng: number, lat: number) => void;
 type MappedBuildingFeature = GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>;
 type MappedRoadFeature = GeoJSON.Feature<GeoJSON.LineString | GeoJSON.MultiLineString>;
 interface TerrainSample { x: number; z: number; elevation: number; }
-interface GameWorldData { origin: [number, number]; buildings: MappedBuildingFeature[]; roads: MappedRoadFeature[]; terrain: TerrainSample[]; terrainSize: number; terrainSegments: number; }
+interface GameWorldData { origin: [number, number]; buildings: MappedBuildingFeature[]; roads: MappedRoadFeature[]; terrain: TerrainSample[]; terrainSize: number; terrainSegments: number; saveSlotId?: string; initialInterior?: SavedInteriorProgress; onInteriorSave?: (state: SavedInteriorProgress) => void; }
 interface BuildingCollisionShape { minX: number; maxX: number; minZ: number; maxZ: number; rings: [number, number][][]; }
 interface ObstacleCollider { x: number; z: number; radius: number; }
 
@@ -37,6 +39,8 @@ export class Game {
   private readonly maxStepHeight = 0.65;
   private readonly cameraRaycaster = new THREE.Raycaster();
   private readonly buildingCollisionShapes: BuildingCollisionShape[] = [];
+  private readonly buildingCollisionIndex = new SpatialCollisionIndex<BuildingCollisionShape>(32);
+  private readonly mappedBuildingPlans: ProceduralBuildingPlan[] = [];
   private readonly cameraObstacles: THREE.Object3D[] = [];
   private readonly obstacleColliders: ObstacleCollider[] = [];
   private readonly animatedLimbs: THREE.Group[] = [];
@@ -276,7 +280,7 @@ export class Game {
   }
 
   private getInteriorStorageKey(): string {
-    return `juju-world-3d-interior:${this.worldData.origin[0].toFixed(4)}:${this.worldData.origin[1].toFixed(4)}`;
+    return `juju-world-3d-interior:${this.worldData.saveSlotId ?? "local"}:${this.worldData.origin[0].toFixed(4)}:${this.worldData.origin[1].toFixed(4)}`;
   }
 
   private saveInteriorSession(): void {
@@ -293,6 +297,14 @@ export class Game {
         savedAt: Date.now(),
       };
       localStorage.setItem(this.getInteriorStorageKey(), JSON.stringify(state));
+      this.worldData.onInteriorSave?.({
+        buildingId: `training-${this.worldData.saveSlotId ?? "local"}`,
+        floor: this.interiorFloor,
+        x: this.player.position.x, y: this.player.position.y, z: this.player.position.z,
+        yaw: this.yaw, inside: this.insideDemoBuilding, savedAt: Date.now(),
+        outside: [this.exteriorReturnPosition.x, this.exteriorReturnPosition.y, this.exteriorReturnPosition.z],
+        doorOpen: this.demoDoorOpen,
+      });
     } catch {
       // Private browsing or storage limits must never stop gameplay.
     }
@@ -431,7 +443,14 @@ export class Game {
           minX: Math.min(box.minX, x), maxX: Math.max(box.maxX, x),
           minZ: Math.min(box.minZ, z), maxZ: Math.max(box.maxZ, z),
         }), { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity });
-        this.buildingCollisionShapes.push({ ...bounds, rings: localRings });
+        const collisionShape = { ...bounds, rings: localRings };
+        this.buildingCollisionShapes.push(collisionShape);
+        this.buildingCollisionIndex.insert(collisionShape, bounds);
+        const plan = generateBuildingPlan({
+          points, sourceId: feature.id, tags: properties as Record<string, unknown>,
+          kind: classifyBuilding(properties as Record<string, unknown>),
+        });
+        if (plan) this.mappedBuildingPlans.push(plan);
         const shape = new THREE.Shape();
         shape.moveTo(points[0][0], -points[0][1]);
         for (let i = 1; i < points.length; i += 1) shape.lineTo(points[i][0], -points[i][1]);
