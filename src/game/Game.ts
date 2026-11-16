@@ -333,12 +333,17 @@ export class Game {
         outside?: number[]; yaw?: number; doorOpen?: boolean; savedAt?: number;
       } : null);
       if (!state) return;
+      let position: number[] | null = null;
       if ("version" in state) {
         if (state.version !== 1 || !Array.isArray(state.position) || state.position.length !== 3 ||
             !state.position.every(Number.isFinite) || !Number.isFinite(state.savedAt) ||
             Date.now() - Number(state.savedAt) > 30 * 24 * 60 * 60 * 1000 || Number(state.savedAt) > Date.now()) return;
-      } else if (!isValidSavedInterior(state)) return;
-      const position = "position" in state ? state.position : [state.x, state.y, state.z];
+        position = state.position;
+      } else {
+        if (!isValidSavedInterior(state)) return;
+        position = [state.x, state.y, state.z];
+      }
+      if (!position) return;
       this.player.position.set(position[0], position[1], position[2]);
       this.yaw = Number.isFinite(state.yaw) ? Number(state.yaw) : 0;
       this.demoDoorOpen = state.doorOpen === true;
@@ -464,7 +469,7 @@ export class Game {
         this.buildingCollisionShapes.push(collisionShape);
         this.buildingCollisionIndex.insert(collisionShape, bounds);
         const plan = generateBuildingPlan({
-          points, sourceId: feature.id, tags: properties as Record<string, unknown>,
+          points: points.map(([x, z]) => ({ x, z })), sourceId: feature.id, tags: properties as Record<string, unknown>,
           kind: classifyBuilding(properties as Record<string, unknown>),
         });
         if (plan) this.mappedBuildingPlans.push(plan);
