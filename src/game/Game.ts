@@ -579,9 +579,10 @@ export class Game {
     const radius = 0.62;
     const offsets: [number, number][] = [[0, 0], [radius, 0], [-radius, 0], [0, radius], [0, -radius],
       [radius * 0.7, radius * 0.7], [-radius * 0.7, radius * 0.7], [radius * 0.7, -radius * 0.7], [-radius * 0.7, -radius * 0.7]];
-    for (const building of this.buildingCollisionShapes) {
-      if (x + radius < building.minX || x - radius > building.maxX ||
-        z + radius < building.minZ || z - radius > building.maxZ) continue;
+    const nearbyBuildings = this.buildingCollisionIndex.query({
+      minX: x - radius, maxX: x + radius, minZ: z - radius, maxZ: z + radius,
+    });
+    for (const building of nearbyBuildings) {
       const touchesSolid = offsets.some(([ox, oz]) => {
         const sampleX = x + ox, sampleZ = z + oz;
         return this.isInsideLocalRing(sampleX, sampleZ, building.rings[0]) &&
