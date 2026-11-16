@@ -35,6 +35,9 @@ let toastTimeout = 0;
 let selectedPlaceMarker: maplibregl.Marker | null = null;
 let gameMode = false;
 let playerMarker: maplibregl.Marker | null = null;
+let destinationMarker: maplibregl.Marker | null = null;
+let destinationCoordinates: [number, number] | null = null;
+let destinationSelectionMode = false;
 let virtualEntranceMarker: maplibregl.Marker | null = null;
 let selectedBuildingName = "";
 let selectedBuildingType: BuildingKind = "other";
@@ -1363,6 +1366,30 @@ function updateGameHud(): void {
   updateGameZone(center.lng, center.lat);
 }
 
+function setPlayerDestination(lng: number, lat: number): void {
+  destinationCoordinates = [lng, lat];
+  if (!destinationMarker) { const element = document.createElement("div"); element.className = "game-destination-marker"; destinationMarker = new maplibregl.Marker({ element, anchor: "center" }).setLngLat(destinationCoordinates).addTo(map); }
+  else destinationMarker.setLngLat(destinationCoordinates);
+  destinationSelectionMode = false;
+  const button = document.querySelector<HTMLButtonElement>("#game-set-destination");
+  const clear = document.querySelector<HTMLButtonElement>("#game-clear-destination");
+  if (button) button.textContent = language === "fr" ? "MODIFIER LA DESTINATION" : "CHANGE DESTINATION";
+  if (clear) clear.disabled = false;
+  updatePlayerNavigationHud();
+  showToast(language === "fr" ? "Destination définie." : "Destination set.");
+}
+function clearPlayerDestination(): void {
+  destinationCoordinates = null; destinationMarker?.remove(); destinationMarker = null; destinationSelectionMode = false;
+  const label = document.querySelector<HTMLElement>("#navigation-destination");
+  const distance = document.querySelector<HTMLElement>("#navigation-distance");
+  const button = document.querySelector<HTMLButtonElement>("#game-set-destination");
+  const clear = document.querySelector<HTMLButtonElement>("#game-clear-destination");
+  if (label) label.textContent = language === "fr" ? "Aucune destination" : "No destination set";
+  if (distance) distance.textContent = "—";
+  if (button) button.textContent = language === "fr" ? "DÉFINIR UNE DESTINATION" : "SET DESTINATION";
+  if (clear) clear.disabled = true;
+  updatePlayerNavigationHud();
+}
 function updatePlayerNavigationHud(): void {
   const position = playerMarker?.getLngLat() ?? map.getCenter();
   const coordinates = document.querySelector<HTMLElement>("#navigation-coordinates");
@@ -1375,6 +1402,14 @@ function updatePlayerNavigationHud(): void {
   if (heading) heading.textContent = playerHeading;
   if (speed) speed.textContent = movementSpeed.toFixed(1);
   if (zoom) zoom.textContent = `${map.getZoom().toFixed(1)}×`;
+  const destinationLabel = document.querySelector<HTMLElement>("#navigation-destination");
+  const distanceLabel = document.querySelector<HTMLElement>("#navigation-distance");
+  if (destinationCoordinates && destinationLabel && distanceLabel) {
+    const [lng, lat] = destinationCoordinates;
+    const meters = haversineDistance(position, { lng, lat });
+    destinationLabel.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    distanceLabel.textContent = meters >= 1000 ? `${(meters / 1000).toFixed(2)} km` : `${Math.round(meters)} m`;
+  }
 }
 
 function metersToScreenPixels(lng: number, lat: number, meters: number): number {
@@ -1608,6 +1643,7 @@ function startGameMode(resumeSession: SavedGameSession | null = null, requestedS
     return;
   }
   gameMode = true;
+  clearPlayerDestination();
   playerHeading = "N";
   createMiniMap();
   heldDirections.clear();
@@ -1681,6 +1717,7 @@ function stopGameMode(): void {
   closeBuildingInterior();
   playerMarker?.remove();
   playerMarker = null;
+  clearPlayerDestination();
   $("#app").classList.remove("game-mode");
   $("#game-mode-toggle").textContent = translations[language].enterGame;
   $("#game-camera").classList.remove("active");
@@ -1716,6 +1753,7 @@ function stopMovementLoop(): void {
   previousMovementTime = 0;
   heldDirections.clear();
   playerMarker?.getElement().classList.remove("is-moving");
+  playerMarker?.getElement().classList.add("is-idle");
 }
 
 function movementTick(time: number): void {
@@ -1723,6 +1761,7 @@ function movementTick(time: number): void {
   if (!gameMode || !playerMarker || heldDirections.size === 0) {
     previousMovementTime = 0;
     playerMarker?.getElement().classList.remove("is-moving");
+    playerMarker?.getElement().classList.add("is-idle");
     return;
   }
   const delta = previousMovementTime ? Math.min((time - previousMovementTime) / 1000, 0.05) : 0;
@@ -1760,6 +1799,7 @@ function movementTick(time: number): void {
     const playerElement = playerMarker.getElement();
     if (activeDirection) playerElement.dataset.direction = activeDirection.direction;
     playerElement.dataset.heading = playerHeading;
+    playerElement.classList.remove("is-idle");
     playerElement.classList.add("is-moving");
     $("#game-player-status").textContent = translations[language].playerReady;
     playerMarker.setLngLat(next);
@@ -1840,6 +1880,12 @@ $("#game-map-recenter").addEventListener("click", () => {
   map.easeTo({ center: player, pitch: 0, bearing: 0, duration: 420 });
   updatePlayerNavigationHud();
 });
+$("#game-set-destination").addEventListener("click", () => {
+  if (!gameMode) return;
+  destinationSelectionMode = true;
+  showToast(language === "fr" ? "Cliquez sur la carte pour choisir la destination." : "Click the map to choose your destination.");
+});
+$("#game-clear-destination").addEventListener("click", clearPlayerDestination);
 
 const networkInfo = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
 window.addEventListener("online", applyStreamingProfile);
@@ -2078,6 +2124,10 @@ $("#places-view").addEventListener("click", togglePointsOfInterest);
 map.on("click", (event) => {
   if (spawnSelectionMode) {
     updateSpawnSelection(event.lngLat.lng, event.lngLat.lat);
+    return;
+  }
+  if (gameMode && destinationSelectionMode) {
+    setPlayerDestination(event.lngLat.lng, event.lngLat.lat);
     return;
   }
   if (gameMode) {
