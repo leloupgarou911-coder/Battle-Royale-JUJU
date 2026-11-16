@@ -1291,9 +1291,22 @@ function updateGameZone(lng: number, lat: number): void {
 }
 
 function updateGameHud(): void {
-  const center = map.getCenter();
+  const center = playerMarker?.getLngLat() ?? map.getCenter();
   $("#game-zone-coordinates").textContent = `${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`;
+  updatePlayerNavigationHud();
   updateGameZone(center.lng, center.lat);
+}
+
+function updatePlayerNavigationHud(): void {
+  const position = playerMarker?.getLngLat() ?? map.getCenter();
+  const coordinates = document.querySelector<HTMLElement>("#navigation-coordinates");
+  const heading = document.querySelector<HTMLElement>("#navigation-heading");
+  const speed = document.querySelector<HTMLElement>("#navigation-speed");
+  const zoom = document.querySelector<HTMLElement>("#navigation-zoom");
+  if (coordinates) coordinates.textContent = `${position.lat.toFixed(5)}, ${position.lng.toFixed(5)}`;
+  if (heading) heading.textContent = playerHeading;
+  if (speed) speed.textContent = movementSpeed.toFixed(1);
+  if (zoom) zoom.textContent = `${map.getZoom().toFixed(1)}×`;
 }
 
 function metersToScreenPixels(lng: number, lat: number, meters: number): number {
@@ -1527,6 +1540,7 @@ function startGameMode(resumeSession: SavedGameSession | null = null): void {
     return;
   }
   gameMode = true;
+  playerHeading = "N";
   createMiniMap();
   heldDirections.clear();
   disableTerrain();
@@ -1617,6 +1631,7 @@ const heldDirections = new Set<string>();
 let movementFrame = 0;
 let previousMovementTime = 0;
 let movementSpeed = 4.5;
+let playerHeading = "N";
 
 const directionKeys: Record<string, { x: number; y: number; direction: string }> = {
   arrowup: { x: 0, y: -1, direction: "up" }, w: { x: 0, y: -1, direction: "up" }, z: { x: 0, y: -1, direction: "up" },
@@ -1663,6 +1678,11 @@ function movementTick(time: number): void {
       return;
     }
     const activeDirection = [...heldDirections].map((key) => directionKeys[key]).filter(Boolean).at(-1);
+    const headingX = direction.x;
+    const headingY = direction.y;
+    playerHeading = headingY < -0.35 ? (headingX > 0.35 ? "NE" : headingX < -0.35 ? "NW" : "N")
+      : headingY > 0.35 ? (headingX > 0.35 ? "SE" : headingX < -0.35 ? "SW" : "S")
+      : headingX > 0 ? "E" : "W";
     addTravelDistance(center, next);
     // Warm deterministic scenery ahead of the current movement vector before entering it.
     warmPredictiveZones(next.lng, next.lat, dx, dy);
@@ -1672,6 +1692,7 @@ function movementTick(time: number): void {
     playerElement.classList.add("is-moving");
     $("#game-player-status").textContent = translations[language].playerReady;
     playerMarker.setLngLat(next);
+    // The player is the camera anchor: keep the live map center locked to the same coordinates.
     map.jumpTo({ center: next });
     updateGameHud();
     saveGameSession();
@@ -1733,6 +1754,21 @@ function setMapView(view: "flat" | "globe"): void {
 
 map.on("move", () => { if (gameMode) syncMiniMap(); });
 map.on("moveend", () => { if (gameMode) updateGameHud(); });
+
+$("#game-map-zoom-in").addEventListener("click", () => {
+  if (!gameMode) return;
+  map.easeTo({ zoom: Math.min(19, map.getZoom() + 1), duration: 220 });
+});
+$("#game-map-zoom-out").addEventListener("click", () => {
+  if (!gameMode) return;
+  map.easeTo({ zoom: Math.max(15, map.getZoom() - 1), duration: 220 });
+});
+$("#game-map-recenter").addEventListener("click", () => {
+  if (!gameMode) return;
+  const player = playerMarker?.getLngLat() ?? map.getCenter();
+  map.easeTo({ center: player, pitch: 0, bearing: 0, duration: 420 });
+  updatePlayerNavigationHud();
+});
 
 const networkInfo = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
 window.addEventListener("online", applyStreamingProfile);
