@@ -39,6 +39,8 @@ let playerMarker: maplibregl.Marker | null = null;
 let destinationMarker: maplibregl.Marker | null = null;
 let destinationCoordinates: [number, number] | null = null;
 let navigationRouteCoordinates: [number, number][] = [];
+let navigationActive = false;
+let navigationWaypointIndex = 1;
 let destinationSelectionMode = false;
 let lastNearbyPoiUpdateAt = 0;
 let travelledRouteCoordinates: [number, number][] = [];
@@ -1399,11 +1401,26 @@ function updateGameHud(): void {
   updateGameZone(center.lng, center.lat);
 }
 
+function loadedRoadFeatures(): Parameters<typeof findRoadRoute>[0] {
+  if (!map.getSource("openmaptiles")) return [];
+  return map.querySourceFeatures("openmaptiles", { sourceLayer: "transportation" }) as unknown as Parameters<typeof findRoadRoute>[0];
+}
+
+function recalculateNavigationRoute(): boolean {
+  if (!destinationCoordinates || !playerMarker) return false;
+  const position = playerMarker.getLngLat();
+  const route = findRoadRoute(loadedRoadFeatures(), [position.lng, position.lat], destinationCoordinates);
+  navigationRouteCoordinates = route ?? [];
+  navigationWaypointIndex = 1;
+  updateTravelledRoute();
+  updatePlayerNavigationHud();
+  return navigationRouteCoordinates.length > 1;
+}
+
 function setPlayerDestination(lng: number, lat: number): void {
   destinationCoordinates = [lng, lat];
-  const roadFeatures = map.getSource("openmaptiles") ? map.querySourceFeatures("openmaptiles", { sourceLayer: "transportation" }) : [];
-  const position = playerMarker?.getLngLat() ?? map.getCenter();
-  navigationRouteCoordinates = findRoadRoute(roadFeatures as unknown as Parameters<typeof findRoadRoute>[0], [position.lng, position.lat], destinationCoordinates) ?? [];
+  navigationActive = false;
+  const routeAvailable = recalculateNavigationRoute();
   if (!destinationMarker) { const element = document.createElement("div"); element.className = "game-destination-marker"; destinationMarker = new maplibregl.Marker({ element, anchor: "center" }).setLngLat(destinationCoordinates).addTo(map); }
   else destinationMarker.setLngLat(destinationCoordinates);
   destinationSelectionMode = false;
@@ -1414,12 +1431,17 @@ function setPlayerDestination(lng: number, lat: number): void {
   updateTravelledRoute();
   updatePlayerNavigationHud();
   saveGameSession(true);
-  showToast(navigationRouteCoordinates.length > 1
-    ? (language === "fr" ? "Itinéraire routier calculé." : "Road route calculated.")
+  if (routeAvailable) {
+    navigationActive = true;
+    startMovementLoop();
+    updateNavigationControl();
+  }
+  showToast(routeAvailable
+    ? (language === "fr" ? "Itinéraire routier calculé · déplacement automatique activé." : "Road route calculated · auto-follow started.")
     : (language === "fr" ? "Destination enregistrée · itinéraire routier indisponible dans les rues chargées." : "Destination saved · road route unavailable in the loaded streets."));
 }
 function clearPlayerDestination(): void {
-  destinationCoordinates = null; navigationRouteCoordinates = []; destinationMarker?.remove(); destinationMarker = null; destinationSelectionMode = false;
+  destinationCoordinates = null; navigationRouteCoordinates = []; navigationActive = false; navigationWaypointIndex = 1; destinationMarker?.remove(); destinationMarker = null; destinationSelectionMode = false;
   const label = document.querySelector<HTMLElement>("#navigation-destination");
   const distance = document.querySelector<HTMLElement>("#navigation-distance");
   const button = document.querySelector<HTMLButtonElement>("#game-set-destination");
@@ -1441,6 +1463,31 @@ function updateTravelledRoute(): void {
   const routeData: GeoJSON.FeatureCollection<GeoJSON.LineString> = { type: "FeatureCollection", features: navigationRouteCoordinates.length > 1 ? [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: navigationRouteCoordinates } }] : [] };
   (map.getSource("juju-navigation-route") as maplibregl.GeoJSONSource | undefined)?.setData(routeData);
   (miniMap?.getSource("juju-mini-navigation-route") as maplibregl.GeoJSONSource | undefined)?.setData(routeData);
+}
+
+function updateNavigationControl(): void {
+  const button = document.querySelector<HTMLButtonElement>("#game-toggle-navigation");
+  const state = document.querySelector<HTMLElement>("#navigation-state");
+  if (button) button.textContent = navigationActive ? (language === "fr" ? "ARRÊTER LE GUIDAGE" : "STOP GUIDANCE") : (language === "fr" ? "REPRENDRE LE GUIDAGE" : "RESUME GUIDANCE");
+  if (state) state.textContent = navigationActive ? (language === "fr" ? "GUIDAGE ACTIF" : "AUTO FOLLOW") : (language === "fr" ? "EN PAUSE" : "PAUSED");
+}
+
+function toggleNavigation(): void {
+  if (!destinationCoordinates) return;
+  if (navigationActive) {
+    navigationActive = false;
+    updateNavigationControl();
+    if (!heldDirections.size) stopMovementLoop();
+    return;
+  }
+  if (navigationRouteCoordinates.length < 2 && !recalculateNavigationRoute()) {
+    showToast(language === "fr" ? "Aucun chemin routier connecté dans les rues chargées. Rapprochez-vous de la destination." : "No connected road route in loaded streets. Move closer to the destination.");
+    return;
+  }
+  navigationActive = true;
+  navigationWaypointIndex = 1;
+  updateNavigationControl();
+  startMovementLoop();
 }
 
 function updatePlayerNavigationHud(): void {
@@ -1480,6 +1527,7 @@ function updatePlayerNavigationHud(): void {
     nearby.textContent = nearest ? `${nearest.name} · ${nearest.distance >= 1000 ? (nearest.distance / 1000).toFixed(1) + " km" : Math.round(nearest.distance) + " m"}` : (language === "fr" ? "Aucun lieu proche affiché" : "No nearby place in view");
     (miniMap?.getSource("juju-mini-nearby-pois") as maplibregl.GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: miniPoiFeatures });
   }
+  updateNavigationControl();
   if (destinationCoordinates && destinationLabel && distanceLabel) {
     const [lng, lat] = destinationCoordinates;
     let meters = haversineDistance(position, { lng, lat });
@@ -1819,6 +1867,8 @@ function startGameMode(resumeSession: SavedGameSession | null = null, requestedS
     destinationMarker?.remove(); destinationMarker = new maplibregl.Marker({ element: destinationElement, anchor: "center" }).setLngLat(destinationCoordinates).addTo(map);
     const roads = map.querySourceFeatures("openmaptiles", { sourceLayer: "transportation" });
     navigationRouteCoordinates = findRoadRoute(roads as unknown as Parameters<typeof findRoadRoute>[0], [spawn.lng, spawn.lat], destinationCoordinates) ?? [];
+    navigationActive = navigationRouteCoordinates.length > 1;
+    navigationWaypointIndex = 1;
   }
   updateTravelledRoute();
   map.easeTo({ center: spawn, zoom: resumeSession?.zoom ?? Math.max(16, map.getZoom()), pitch: 0, bearing: 0, duration: 850 });
@@ -1900,7 +1950,7 @@ function stopMovementLoop(): void {
 
 function movementTick(time: number): void {
   movementFrame = 0;
-  if (!gameMode || !playerMarker || heldDirections.size === 0) {
+  if (!gameMode || !playerMarker || (heldDirections.size === 0 && !navigationActive)) {
     previousMovementTime = 0;
     playerMarker?.getElement().classList.remove("is-moving");
     playerMarker?.getElement().classList.add("is-idle");
@@ -1910,23 +1960,66 @@ function movementTick(time: number): void {
   previousMovementTime = time;
   let dx = 0;
   let dy = 0;
-  for (const key of heldDirections) {
-    const direction = directionKeys[key];
-    if (direction) { dx += direction.x; dy += direction.y; }
+  const center = map.getCenter();
+  let stepDistance = movementSpeed * delta;
+  if (navigationActive && navigationRouteCoordinates.length > 1) {
+    while (navigationWaypointIndex < navigationRouteCoordinates.length) {
+      const waypoint = navigationRouteCoordinates[navigationWaypointIndex];
+      const distance = haversineDistance(center, { lng: waypoint[0], lat: waypoint[1] });
+      if (distance > 2.5) break;
+      navigationWaypointIndex++;
+    }
+    if (navigationWaypointIndex >= navigationRouteCoordinates.length) {
+      navigationActive = false;
+      updateNavigationControl();
+      showToast(language === "fr" ? "Destination atteinte." : "Destination reached.");
+      saveGameSession(true);
+    } else {
+      const waypoint = navigationRouteCoordinates[navigationWaypointIndex];
+      const deltaLng = (waypoint[0] - center.lng) * Math.cos(center.lat * Math.PI / 180);
+      const deltaLat = waypoint[1] - center.lat;
+      dx = deltaLng;
+      dy = -deltaLat;
+      const distance = haversineDistance(center, { lng: waypoint[0], lat: waypoint[1] });
+      stepDistance = Math.min(stepDistance, distance);
+    }
+  }
+  if (!navigationActive) {
+    for (const key of heldDirections) {
+      const direction = directionKeys[key];
+      if (direction) { dx += direction.x; dy += direction.y; }
+    }
   }
   const length = Math.hypot(dx, dy);
   if (length > 0 && delta > 0) {
     const direction = normalizeDirection({ x: dx, y: dy });
     if (!direction) return;
-    const center = map.getCenter();
-    const destination = destinationFromDirection(center, direction, movementSpeed * delta);
-    const next = new maplibregl.LngLat(destination.lng, destination.lat);
+    const destination = destinationFromDirection(center, direction, stepDistance);
+    let next = new maplibregl.LngLat(destination.lng, destination.lat);
     if (isBuildingCollision(next.lng, next.lat)) {
-      $("#game-player-status").textContent = translations[language].blocked;
-      heldDirections.clear();
-      playerMarker.getElement().classList.remove("is-moving");
-      previousMovementTime = 0;
-      return;
+      if (navigationActive) {
+        navigationActive = false;
+        updateNavigationControl();
+        $("#game-player-status").textContent = language === "fr" ? "Itinéraire bloqué par un obstacle. Guidage arrêté." : "Route blocked by an obstacle. Guidance stopped.";
+        showToast(language === "fr" ? "Obstacle sur le trajet : guidage arrêté." : "Obstacle on route: guidance stopped.");
+        heldDirections.clear();
+        previousMovementTime = 0;
+        saveGameSession(true);
+        return;
+      }
+      const horizontal = destinationFromDirection(center, { x: direction.x, y: 0 }, stepDistance);
+      const vertical = destinationFromDirection(center, { x: 0, y: direction.y }, stepDistance);
+      const horizontalClear = Math.abs(direction.x) > 0.01 && !isBuildingCollision(horizontal.lng, horizontal.lat);
+      const verticalClear = Math.abs(direction.y) > 0.01 && !isBuildingCollision(vertical.lng, vertical.lat);
+      if (horizontalClear) next = new maplibregl.LngLat(horizontal.lng, horizontal.lat);
+      else if (verticalClear) next = new maplibregl.LngLat(vertical.lng, vertical.lat);
+      else {
+        $("#game-player-status").textContent = translations[language].blocked;
+        heldDirections.clear();
+        playerMarker.getElement().classList.remove("is-moving");
+        previousMovementTime = 0;
+        return;
+      }
     }
     const activeDirection = [...heldDirections].map((key) => directionKeys[key]).filter(Boolean).at(-1);
     const headingX = direction.x;
@@ -1960,7 +2053,7 @@ function movementTick(time: number): void {
 }
 
 function startMovementLoop(): void {
-  if (!movementFrame && gameMode && heldDirections.size) {
+  if (!movementFrame && gameMode && (heldDirections.size || navigationActive)) {
     previousMovementTime = 0;
     movementFrame = window.requestAnimationFrame(movementTick);
   }
@@ -2035,6 +2128,7 @@ $("#game-set-destination").addEventListener("click", () => {
   showToast(language === "fr" ? "Cliquez sur la carte pour choisir la destination." : "Click the map to choose your destination.");
 });
 $("#game-clear-destination").addEventListener("click", clearPlayerDestination);
+$("#game-toggle-navigation").addEventListener("click", toggleNavigation);
 
 const networkInfo = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
 window.addEventListener("online", applyStreamingProfile);
@@ -2044,6 +2138,7 @@ networkInfo?.addEventListener("change", applyStreamingProfile);
 // MapLibre streams vector tiles for the visible viewport as the camera moves.
 map.on("sourcedata", (event) => {
   if (!gameMode || event.sourceId !== "openmaptiles" || !event.isSourceLoaded) return;
+  if (destinationCoordinates && navigationRouteCoordinates.length < 2 && playerMarker) recalculateNavigationRoute();
   if (map.areTilesLoaded()) {
     const zone = zoneFor(map.getCenter().lng, map.getCenter().lat);
     if (activeZoneKey === zone.key) {
