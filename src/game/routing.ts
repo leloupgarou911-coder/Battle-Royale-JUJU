@@ -25,7 +25,7 @@ function lineParts(feature: RoadFeature): Coordinate[][] {
   return lines.filter((line) => line.length >= 2);
 }
 
-function nearestNode(nodes: Map<string, Coordinate>, point: Coordinate, maxSnapMeters = 120): string | null {
+function nearestNode(nodes: Map<string, Coordinate>, point: Coordinate, maxSnapMeters = 50): string | null {
   let best: string | null = null;
   let bestDistance = Infinity;
   for (const [key, coordinate] of nodes) {
@@ -58,8 +58,9 @@ export function findRoadRoute(features: RoadFeature[], start: Coordinate, end: C
     }
     if (segments >= maxSegments) break;
   }
-  const source = nearestNode(nodes, start, 120), target = nearestNode(nodes, end, 120);
+  const source = nearestNode(nodes, start, 50), target = nearestNode(nodes, end, 50);
   if (!source || !target) return null;
+  if (source === target && haversineDistance({ lng: start[0], lat: start[1] }, { lng: end[0], lat: end[1] }) > 15) return null;
   const distances = new Map<string, number>([[source, 0]]);
   const previous = new Map<string, string>();
   const targetPoint = nodes.get(target)!;
