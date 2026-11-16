@@ -1938,6 +1938,7 @@ const speedValue = $("#game-speed-value");
 speedControl.addEventListener("input", () => {
   movementSpeed = Number(speedControl.value);
   speedValue.textContent = movementSpeed.toFixed(1);
+  updatePlayerNavigationHud();
 });
 
 $("#game-clear-explored").addEventListener("click", clearExploredZones);
