@@ -193,6 +193,17 @@ export class Game {
     this.interiorRoot.visible = false;
     this.scene.add(this.interiorRoot);
     addBox(this.interiorRoot, "interior-floor", 0, 0, -15, 12.8, 0.18, 11.2, floorMaterial);
+    const interiorCeiling = addBox(this.interiorRoot, "interior-ceiling", 0, 3.98, -15, 12.8, 0.16, 11.2, trimMaterial);
+    interiorCeiling.castShadow = false;
+    const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x8fc7d4, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.58 });
+    const windowFrameMaterial = new THREE.MeshStandardMaterial({ color: 0x52666a, roughness: 0.8 });
+    for (const side of [-1, 1]) {
+      for (const z of [-13.2, -17.1]) {
+        addBox(this.interiorRoot, "interior-window-glass", side * 6.18, 2.45, z, 0.06, 1.35, 2.0, glassMaterial);
+        addBox(this.interiorRoot, "interior-window-sill", side * 6.12, 1.72, z, 0.18, 0.12, 2.15, windowFrameMaterial);
+        addBox(this.interiorRoot, "interior-window-header", side * 6.12, 3.18, z, 0.18, 0.12, 2.15, windowFrameMaterial);
+      }
+    }
     addBox(this.interiorRoot, "interior-left-wall", -6.35, 2, -15, 0.25, 4, 11.2, wallMaterial, true);
     addBox(this.interiorRoot, "interior-right-wall", 6.35, 2, -15, 0.25, 4, 11.2, wallMaterial, true);
     addBox(this.interiorRoot, "interior-back-wall", 0, 2, -20.55, 12.8, 4, 0.25, wallMaterial, true);
@@ -260,6 +271,8 @@ export class Game {
       this.exteriorReturnPosition.copy(this.player.position);
       this.insideDemoBuilding = true;
       this.interiorRoot.visible = true;
+      const ceiling = this.interiorRoot.getObjectByName("interior-ceiling");
+      if (ceiling) ceiling.visible = false;
       const roof = this.scene.getObjectByName("training-building-roof");
       if (roof) roof.visible = false;
       this.player.position.set(0, 0, -10.5);
@@ -273,6 +286,8 @@ export class Game {
     if (nearExit) {
       this.insideDemoBuilding = false;
       this.interiorRoot.visible = false;
+      const ceiling = this.interiorRoot.getObjectByName("interior-ceiling");
+      if (ceiling) ceiling.visible = true;
       const roof = this.scene.getObjectByName("training-building-roof");
       if (roof) roof.visible = true;
       this.player.position.copy(this.exteriorReturnPosition);
