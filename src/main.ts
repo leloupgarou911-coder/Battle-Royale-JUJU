@@ -694,6 +694,7 @@ function createMiniMap(): void {
     });
     miniMapReady = true;
     miniMapOverlaySignature = "";
+    updateTravelledRoute();
     syncMiniMap(true);
   });
   miniMap.on("idle", () => {
@@ -788,6 +789,7 @@ function setLanguage(next: Language): void {
   setHomeText(".home-bottom span:last-child", homeText.bottom);
   setHomeText("#save-slots-back", next === "fr" ? "← MENU PRINCIPAL" : "← MAIN MENU");
   setHomeText("#home-dialog-close", "×");
+  updatePlayerNavigationHud();
 }
 
 
@@ -1741,6 +1743,9 @@ function stopGameMode(): void {
   playerMarker?.remove();
   playerMarker = null;
   clearPlayerDestination();
+  travelledRouteCoordinates = [];
+  lastRoutePoint = null;
+  updateTravelledRoute();
   $("#app").classList.remove("game-mode");
   $("#game-mode-toggle").textContent = translations[language].enterGame;
   $("#game-camera").classList.remove("active");
