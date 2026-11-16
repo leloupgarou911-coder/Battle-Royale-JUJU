@@ -1129,3 +1129,8 @@ button:focus-visible,input:focus-visible{outline:2px solid #8fe2d9;outline-offse
 .navigation-nearby { display:grid;gap:5px;padding:8px 10px;border:1px solid rgba(117,217,208,.16);border-radius:8px;background:rgba(117,217,208,.045); }
 .navigation-nearby span { color:#829da8;font-size:7px;font-weight:800;letter-spacing:.13em; }
 .navigation-nearby strong { overflow:hidden;color:#bdeee7;font:600 10px "DM Sans",sans-serif;text-overflow:ellipsis;white-space:nowrap; }
+
+.spawn-selecting #map .maplibregl-canvas-container { cursor: crosshair !important; }
+.spawn-selecting .spawn-picker-panel { box-shadow: 0 22px 70px rgba(0,0,0,.5), 0 0 0 1px rgba(126,224,213,.12), 0 0 44px rgba(92,205,194,.12); }
+.spawn-preview-marker { animation: spawn-marker-pulse 1.6s ease-in-out infinite; }
+@keyframes spawn-marker-pulse { 50% { box-shadow: 0 0 0 11px rgba(231,173,104,.12),0 4px 15px rgba(0,0,0,.6); } }
