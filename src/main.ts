@@ -1515,9 +1515,9 @@ function isBuildingCollision(lng: number, lat: number): boolean {
     };
     for (const feature of candidates) {
       const geometry = feature.geometry;
-      const polygons: unknown[][] = geometry.type === "Polygon"
-        ? (geometry.coordinates as unknown[][])
-        : geometry.type === "MultiPolygon" ? (geometry.coordinates as unknown[][][]).flat() : [];
+      const polygons: unknown[][][] = geometry.type === "Polygon"
+        ? [geometry.coordinates as unknown[][]]
+        : geometry.type === "MultiPolygon" ? (geometry.coordinates as unknown[][][]) : [];
       for (const polygon of polygons) {
         const outer = polygon[0] as unknown[];
         if (!Array.isArray(outer)) continue;
