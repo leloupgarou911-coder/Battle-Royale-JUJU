@@ -1340,6 +1340,8 @@ function setGameWorldVisibility(visible: boolean): void {
   ].forEach((id) => {
     if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visibility);
   });
+  if (map.getLayer("juju-travelled-route-line")) map.moveLayer("juju-travelled-route-line");
+  if (map.getLayer("juju-navigation-route-line")) map.moveLayer("juju-navigation-route-line");
 }
 
 function updateGameZone(lng: number, lat: number): void {
@@ -1476,9 +1478,18 @@ function updatePlayerNavigationHud(): void {
   }
   if (destinationCoordinates && destinationLabel && distanceLabel) {
     const [lng, lat] = destinationCoordinates;
-    const meters = navigationRouteCoordinates.length > 1
-      ? navigationRouteCoordinates.slice(1).reduce((total, point, index) => total + haversineDistance({ lng: navigationRouteCoordinates[index][0], lat: navigationRouteCoordinates[index][1] }, { lng: point[0], lat: point[1] }), 0)
-      : haversineDistance(position, { lng, lat });
+    let meters = haversineDistance(position, { lng, lat });
+    if (navigationRouteCoordinates.length > 1) {
+      let nearestIndex = 0, nearestDistance = Infinity;
+      navigationRouteCoordinates.forEach((point, index) => {
+        const distance = haversineDistance(position, { lng: point[0], lat: point[1] });
+        if (distance < nearestDistance) { nearestDistance = distance; nearestIndex = index; }
+      });
+      meters = nearestDistance + navigationRouteCoordinates.slice(nearestIndex + 1).reduce((total, point, index) => {
+        const previous = navigationRouteCoordinates[nearestIndex + index];
+        return total + haversineDistance({ lng: previous[0], lat: previous[1] }, { lng: point[0], lat: point[1] });
+      }, 0);
+    }
     destinationLabel.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
     distanceLabel.textContent = navigationRouteCoordinates.length > 1
       ? `${meters >= 1000 ? (meters / 1000).toFixed(2) + " km" : Math.round(meters) + " m"} · ${language === "fr" ? "par route" : "by road"}`
