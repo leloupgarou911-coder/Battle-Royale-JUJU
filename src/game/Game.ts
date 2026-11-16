@@ -200,8 +200,8 @@ export class Game {
     this.activeInteriorKind = this.mappedBuildingPlans[0]?.kind ?? inferBuildingPrefabKind(tags, classifyBuilding);
     const prefab = getBuildingPrefab(this.activeInteriorKind);
     const layout = createInteriorLayout(this.activeInteriorKind);
-    const wallMaterial = new THREE.MeshStandardMaterial({ color: prefab.wallColor, roughness: 0.92 });
-    const floorMaterial = new THREE.MeshStandardMaterial({ color: prefab.floorColor, roughness: 0.96 });
+    const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, map: createProceduralSurfaceTexture(prefab.wallColor, 0x66594c, "brick"), roughness: 0.92 });
+    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, map: createProceduralSurfaceTexture(prefab.floorColor, 0x4c4a45, "tile"), roughness: 0.96 });
     const trimMaterial = new THREE.MeshStandardMaterial({ color: 0x4d6267, roughness: 0.72 });
     const furnitureMaterial = new THREE.MeshStandardMaterial({ color: 0x856b50, roughness: 0.9 });
     const addBox = (parent: THREE.Object3D, name: string, x: number, y: number, z: number,
@@ -322,6 +322,10 @@ export class Game {
     addBox(this.interiorRoot, "interior-upper-floor", 0, 3.28, -10.85, 12.5, 0.18, 3.0, floorMaterial);
     addBox(this.interiorRoot, "interior-upper-back-rail", 0, 3.8, -12.25, 12.4, 1.0, 0.12, trimMaterial);
     this.interactionPrompt.textContent = `${this.activeInteriorKind} · ${prefab.rooms.join(" / ")} · E: open door`;
+  }
+
+  private getInteriorBuildingId(): string {
+    return `training:${this.worldData.origin[0].toFixed(4)}:${this.worldData.origin[1].toFixed(4)}`;
   }
 
   private getInteriorStorageKey(): string {
