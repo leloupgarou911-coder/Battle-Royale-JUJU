@@ -1413,7 +1413,10 @@ function setPlayerDestination(lng: number, lat: number): void {
   if (clear) clear.disabled = false;
   updateTravelledRoute();
   updatePlayerNavigationHud();
-  showToast(language === "fr" ? "Destination définie." : "Destination set.");
+  saveGameSession(true);
+  showToast(navigationRouteCoordinates.length > 1
+    ? (language === "fr" ? "Itinéraire routier calculé." : "Road route calculated.")
+    : (language === "fr" ? "Destination enregistrée · itinéraire routier indisponible dans les rues chargées." : "Destination saved · road route unavailable in the loaded streets."));
 }
 function clearPlayerDestination(): void {
   destinationCoordinates = null; navigationRouteCoordinates = []; destinationMarker?.remove(); destinationMarker = null; destinationSelectionMode = false;
@@ -1427,6 +1430,7 @@ function clearPlayerDestination(): void {
   if (clear) clear.disabled = true;
   updateTravelledRoute();
   updatePlayerNavigationHud();
+  saveGameSession(true);
 }
 function updateTravelledRoute(): void {
   const data: GeoJSON.FeatureCollection<GeoJSON.LineString> = { type: "FeatureCollection", features: travelledRouteCoordinates.length > 1 ? [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: travelledRouteCoordinates } }] : [] };
