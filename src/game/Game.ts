@@ -358,7 +358,9 @@ export class Game {
   private restoreInteriorSession(): void {
     try {
       const raw = localStorage.getItem(this.getInteriorStorageKey());
-      const savedSlotInterior = this.worldData.initialInterior?.buildingId === this.getInteriorBuildingId()\n        ? this.worldData.initialInterior : null;\n      const state = savedSlotInterior ?? (raw ? JSON.parse(raw) as {
+      const savedSlotInterior = this.worldData.initialInterior?.buildingId === this.getInteriorBuildingId()
+        ? this.worldData.initialInterior : null;
+      const state = savedSlotInterior ?? (raw ? JSON.parse(raw) as {
         version?: number; inside?: boolean; floor?: number; position?: number[];
         outside?: number[]; yaw?: number; doorOpen?: boolean; savedAt?: number;
       } : null);
@@ -969,7 +971,11 @@ export class Game {
       if (object instanceof THREE.Mesh) {
         object.geometry.dispose();
         const materials = Array.isArray(object.material) ? object.material : [object.material];
-        materials.forEach((material) => {\n          const textured = material as THREE.MeshStandardMaterial;\n          textured.map?.dispose();\n          material.dispose();\n        });
+        materials.forEach((material) => {
+          const textured = material as THREE.MeshStandardMaterial;
+          textured.map?.dispose();
+          material.dispose();
+        });
       }
     });
     this.renderer.dispose();
