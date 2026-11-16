@@ -1424,6 +1424,18 @@ function updatePlayerNavigationHud(): void {
     const label = document.querySelector<HTMLElement>("#navigation-destination");
     if (!destinationCoordinates && label) label.textContent = "Aucune destination";
   }
+  const nearby = document.querySelector<HTMLElement>("#navigation-nearby-place");
+  if (nearby) {
+    const poiLayerReady = map.getLayer("juju-poi-points");
+    const candidates = poiLayerReady ? map.queryRenderedFeatures({ layers: ["juju-poi-points"] }) : [];
+    const nearest = candidates.map((feature) => {
+      if (feature.geometry.type !== "Point") return null;
+      const coords = feature.geometry.coordinates as [number, number];
+      const props = feature.properties ?? {};
+      return { name: String(props.name ?? props.name_en ?? (language === "fr" ? "Lieu à proximité" : "Nearby place")), distance: haversineDistance(position, { lng: coords[0], lat: coords[1] }) };
+    }).filter((item): item is { name: string; distance: number } => !!item && item.distance <= 1500).sort((a, b) => a.distance - b.distance)[0];
+    nearby.textContent = nearest ? `${nearest.name} · ${nearest.distance >= 1000 ? (nearest.distance / 1000).toFixed(1) + " km" : Math.round(nearest.distance) + " m"}` : (language === "fr" ? "Aucun lieu proche affiché" : "No nearby place in view");
+  }
   if (destinationCoordinates && destinationLabel && distanceLabel) {
     const [lng, lat] = destinationCoordinates;
     const meters = haversineDistance(position, { lng, lat });
