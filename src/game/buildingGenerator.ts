@@ -147,6 +147,8 @@ export interface SavedInteriorProgress {
   yaw: number;
   inside: boolean;
   savedAt: number;
+  outside?: [number, number, number];
+  doorOpen?: boolean;
 }
 
 export function isValidSavedInterior(
@@ -158,5 +160,7 @@ export function isValidSavedInterior(
     Number.isInteger(v.floor) && (v.floor as number) >= 0 && (v.floor as number) < 5 &&
     [v.x, v.y, v.z, v.yaw, v.savedAt].every(Number.isFinite) &&
     (v.savedAt as number) <= now && now - (v.savedAt as number) <= maxAgeMs &&
-    typeof v.inside === "boolean";
+    typeof v.inside === "boolean" &&
+    (v.outside === undefined || (Array.isArray(v.outside) && v.outside.length === 3 && v.outside.every(Number.isFinite))) &&
+    (v.doorOpen === undefined || typeof v.doorOpen === "boolean");
 }
