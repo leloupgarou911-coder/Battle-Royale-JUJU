@@ -313,16 +313,18 @@ export class Game {
   private restoreInteriorSession(): void {
     try {
       const raw = localStorage.getItem(this.getInteriorStorageKey());
-      if (!raw) return;
-      const state = JSON.parse(raw) as {
+      const state = this.worldData.initialInterior ?? (raw ? JSON.parse(raw) as {
         version?: number; inside?: boolean; floor?: number; position?: number[];
         outside?: number[]; yaw?: number; doorOpen?: boolean; savedAt?: number;
-      };
-      if (state.version !== 1 || !Array.isArray(state.position) || state.position.length !== 3 ||
-          !state.position.every(Number.isFinite) || !Number.isFinite(state.savedAt) ||
-          Date.now() - Number(state.savedAt) > 30 * 24 * 60 * 60 * 1000 ||
-          Number(state.savedAt) > Date.now()) return;
-      this.player.position.set(state.position[0], state.position[1], state.position[2]);
+      } : null);
+      if (!state) return;
+      if ("version" in state) {
+        if (state.version !== 1 || !Array.isArray(state.position) || state.position.length !== 3 ||
+            !state.position.every(Number.isFinite) || !Number.isFinite(state.savedAt) ||
+            Date.now() - Number(state.savedAt) > 30 * 24 * 60 * 60 * 1000 || Number(state.savedAt) > Date.now()) return;
+      } else if (!isValidSavedInterior(state)) return;
+      const position = "position" in state ? state.position : [state.x, state.y, state.z];
+      this.player.position.set(position[0], position[1], position[2]);
       this.yaw = Number.isFinite(state.yaw) ? Number(state.yaw) : 0;
       this.demoDoorOpen = state.doorOpen === true;
       this.doorTargetAngle = this.demoDoorOpen ? -Math.PI / 2 : 0;
@@ -757,7 +759,7 @@ export class Game {
     this.exteriorDoor.rotation.y = THREE.MathUtils.damp(this.exteriorDoor.rotation.y, this.doorTargetAngle, 9, delta);
     this.updateRoomStreaming();
     this.saveElapsed += delta;
-    if (this.saveElapsed >= 1) { this.saveElapsed = 0; this.saveInteriorSession(); }
+    if (this.saveElapsed >= 5) { this.saveElapsed = 0; this.saveInteriorSession(); }
     this.updateCamera(delta);
     this.renderer.render(this.scene, this.camera);
     const lng = this.worldData.origin[0] + this.player.position.x / this.metersPerLongitude;
