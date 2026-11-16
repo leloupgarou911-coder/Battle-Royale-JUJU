@@ -19,6 +19,7 @@ import { applyDailyMissionProgress, createDailyMissionState, emptyProgress, norm
 import { detectStreamingProfile } from "../src/game/streaming.ts";
 import { circlesOverlap, collisionSampleOffsets } from "../src/game/collisions.ts";
 import { circleIntersectsInteriorBox, interiorGroundHeight, TRAINING_BUILDING } from "../src/game/architecture.ts";
+import { getBuildingPrefab, inferBuildingPrefabKind, isRoomWithinLoadRadius } from "../src/game/buildingPrefabs.ts";
 import { readFileSync } from "node:fs";
 import { translations } from "../src/i18n/translations.ts";
 
@@ -282,4 +283,27 @@ test("interior furniture collision uses circle-to-box distance", () => {
   const sofa = { x: -3.8, z: -12.2, halfX: 1.05, halfZ: 0.45 };
   assert.equal(circleIntersectsInteriorBox(-3.8, -12.2, 0.62, sofa), true);
   assert.equal(circleIntersectsInteriorBox(-1.8, -12.2, 0.62, sofa), false);
+});
+
+test("building prefab catalogue covers the main real-world building categories", () => {
+  for (const kind of ["house", "apartment", "school", "shop", "office", "industrial", "other"]) {
+    const prefab = getBuildingPrefab(kind);
+    assert.equal(prefab.kind, kind);
+    assert.ok(prefab.width > 0 && prefab.depth > 0 && prefab.wallHeight > 0);
+    assert.ok(prefab.floors >= 1);
+    assert.ok(prefab.rooms.length >= 2);
+  }
+});
+
+test("building prefab inference uses the dominant mapped building tags", () => {
+  const classify = (tags) => tags.building === "school" ? "school" : tags.building === "apartments" ? "apartment" : "other";
+  assert.equal(inferBuildingPrefabKind([{ building: "school" }, { building: "school" }, { building: "apartments" }], classify), "school");
+  assert.equal(inferBuildingPrefabKind([{ building: "yes" }], classify), "house");
+});
+
+test("nearby room streaming checks distance and rejects invalid radii", () => {
+  assert.equal(isRoomWithinLoadRadius(0, 0, 3, 4, 5), true);
+  assert.equal(isRoomWithinLoadRadius(0, 0, 3, 4, 4.9), false);
+  assert.equal(isRoomWithinLoadRadius(0, 0, 3, 4, -1), false);
+  assert.equal(isRoomWithinLoadRadius(Number.NaN, 0, 0, 0, 5), false);
 });
