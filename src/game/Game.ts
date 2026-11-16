@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { circleIntersectsInteriorBox, interiorGroundHeight } from "./architecture.ts";
 
 type PositionCallback = (x: number, z: number, lng: number, lat: number) => void;
 type MappedBuildingFeature = GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>;
@@ -226,11 +227,7 @@ export class Game {
 
   private groundHeightAt(x: number, z: number): number {
     if (!this.insideDemoBuilding) return this.terrainHeightAt(x, z);
-    if (z > -12.15) return x > 3.2 || this.interiorFloor === 1 ? 3.2 : 0;
-    if (x > 3.55 && x < 5.55 && z >= -19.1 && z <= -12.15) {
-      return THREE.MathUtils.clamp((z + 19.0) / 6.85, 0, 1) * 3.2;
-    }
-    return 0;
+    return interiorGroundHeight(x, z, this.interiorFloor) ?? this.terrainHeightAt(x, z);
   }
 
   private updateInteraction(): void {
@@ -452,9 +449,7 @@ export class Game {
       if (touchesSolid) return true;
     }
     for (const box of this.interiorColliders) {
-      const nearestX = THREE.MathUtils.clamp(x, box.x - box.halfX, box.x + box.halfX);
-      const nearestZ = THREE.MathUtils.clamp(z, box.z - box.halfZ, box.z + box.halfZ);
-      if (Math.hypot(x - nearestX, z - nearestZ) < radius) return true;
+      if (circleIntersectsInteriorBox(x, z, radius, box)) return true;
     }
     for (const obstacle of this.obstacleColliders) {
       const combined = radius + obstacle.radius;
