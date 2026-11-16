@@ -16,6 +16,7 @@ import { circlesOverlap, collisionSampleOffsets } from "./game/collisions.ts";
 
 import { translations, type Language } from "./i18n/translations.ts";
 import { Game } from "./game/Game.ts";
+import { findRoadRoute } from "./game/routing.ts";
 
 const $ = <T extends HTMLElement>(selector: string): T => {
   const element = document.querySelector<T>(selector);
@@ -37,6 +38,7 @@ let gameMode = false;
 let playerMarker: maplibregl.Marker | null = null;
 let destinationMarker: maplibregl.Marker | null = null;
 let destinationCoordinates: [number, number] | null = null;
+let navigationRouteCoordinates: [number, number][] = [];
 let destinationSelectionMode = false;
 let lastNearbyPoiUpdateAt = 0;
 let travelledRouteCoordinates: [number, number][] = [];
@@ -218,6 +220,8 @@ function currentSessionSnapshot(): SavedGameSession {
     movementSpeed,
     zoom: Math.max(15, Math.min(19, map.getZoom())),
     savedAt: Date.now(),
+    destination: destinationCoordinates ? [...destinationCoordinates] as [number, number] : null,
+    travelledRoute: travelledRouteCoordinates.slice(-1800),
   };
 }
 function saveGameSession(force = false): void {
@@ -682,6 +686,8 @@ function createMiniMap(): void {
     miniMap.addLayer({ id: "juju-mini-travelled-route-line", type: "line", source: "juju-mini-travelled-route", paint: { "line-color": "#70d8cb", "line-width": 2.5, "line-opacity": 0.95 } });
     miniMap.addSource("juju-mini-destination", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     miniMap.addLayer({ id: "juju-mini-destination-point", type: "circle", source: "juju-mini-destination", paint: { "circle-radius": 6, "circle-color": "#efbd58", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
+    miniMap.addSource("juju-mini-navigation-route", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    miniMap.addLayer({ id: "juju-mini-navigation-route-line", type: "line", source: "juju-mini-navigation-route", paint: { "line-color": "#f0bd58", "line-width": 2.8, "line-dasharray": [1.5, 1] } });
     miniMap.addSource("juju-mini-visited-zones", {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
@@ -1142,6 +1148,8 @@ function ensureGameLayers(): void {
   if (!map.getSource("openmaptiles")) return;
   if (!map.getSource("juju-travelled-route")) map.addSource("juju-travelled-route", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
   if (!map.getLayer("juju-travelled-route-line")) map.addLayer({ id: "juju-travelled-route-line", type: "line", source: "juju-travelled-route", paint: { "line-color": "#70d8cb", "line-width": 4, "line-opacity": 0.92 } });
+  if (!map.getSource("juju-navigation-route")) map.addSource("juju-navigation-route", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  if (!map.getLayer("juju-navigation-route-line")) map.addLayer({ id: "juju-navigation-route-line", type: "line", source: "juju-navigation-route", paint: { "line-color": "#f0bd58", "line-width": 4, "line-dasharray": [1.5, 1], "line-opacity": 0.95 } });
 
   // Real-world land cover from OpenMapTiles, shown only in game mode.
   if (!map.getLayer("juju-game-greenery")) {
@@ -1389,6 +1397,9 @@ function updateGameHud(): void {
 
 function setPlayerDestination(lng: number, lat: number): void {
   destinationCoordinates = [lng, lat];
+  const roadFeatures = map.getSource("openmaptiles") ? map.querySourceFeatures("openmaptiles", { sourceLayer: "transportation" }) : [];
+  const position = playerMarker?.getLngLat() ?? map.getCenter();
+  navigationRouteCoordinates = findRoadRoute(roadFeatures as unknown as Parameters<typeof findRoadRoute>[0], [position.lng, position.lat], destinationCoordinates) ?? [];
   if (!destinationMarker) { const element = document.createElement("div"); element.className = "game-destination-marker"; destinationMarker = new maplibregl.Marker({ element, anchor: "center" }).setLngLat(destinationCoordinates).addTo(map); }
   else destinationMarker.setLngLat(destinationCoordinates);
   destinationSelectionMode = false;
@@ -1401,7 +1412,7 @@ function setPlayerDestination(lng: number, lat: number): void {
   showToast(language === "fr" ? "Destination définie." : "Destination set.");
 }
 function clearPlayerDestination(): void {
-  destinationCoordinates = null; destinationMarker?.remove(); destinationMarker = null; destinationSelectionMode = false;
+  destinationCoordinates = null; navigationRouteCoordinates = []; destinationMarker?.remove(); destinationMarker = null; destinationSelectionMode = false;
   const label = document.querySelector<HTMLElement>("#navigation-destination");
   const distance = document.querySelector<HTMLElement>("#navigation-distance");
   const button = document.querySelector<HTMLButtonElement>("#game-set-destination");
@@ -1419,6 +1430,9 @@ function updateTravelledRoute(): void {
   (miniMap?.getSource("juju-mini-travelled-route") as maplibregl.GeoJSONSource | undefined)?.setData(data);
   const destinationData: GeoJSON.FeatureCollection<GeoJSON.Point> = { type: "FeatureCollection", features: destinationCoordinates ? [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: destinationCoordinates } }] : [] };
   (miniMap?.getSource("juju-mini-destination") as maplibregl.GeoJSONSource | undefined)?.setData(destinationData);
+  const routeData: GeoJSON.FeatureCollection<GeoJSON.LineString> = { type: "FeatureCollection", features: navigationRouteCoordinates.length > 1 ? [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: navigationRouteCoordinates } }] : [] };
+  (map.getSource("juju-navigation-route") as maplibregl.GeoJSONSource | undefined)?.setData(routeData);
+  (miniMap?.getSource("juju-mini-navigation-route") as maplibregl.GeoJSONSource | undefined)?.setData(routeData);
 }
 
 function updatePlayerNavigationHud(): void {
@@ -1456,9 +1470,13 @@ function updatePlayerNavigationHud(): void {
   }
   if (destinationCoordinates && destinationLabel && distanceLabel) {
     const [lng, lat] = destinationCoordinates;
-    const meters = haversineDistance(position, { lng, lat });
+    const meters = navigationRouteCoordinates.length > 1
+      ? navigationRouteCoordinates.slice(1).reduce((total, point, index) => total + haversineDistance({ lng: navigationRouteCoordinates[index][0], lat: navigationRouteCoordinates[index][1] }, { lng: point[0], lat: point[1] }), 0)
+      : haversineDistance(position, { lng, lat });
     destinationLabel.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-    distanceLabel.textContent = meters >= 1000 ? `${(meters / 1000).toFixed(2)} km` : `${Math.round(meters)} m`;
+    distanceLabel.textContent = navigationRouteCoordinates.length > 1
+      ? `${meters >= 1000 ? (meters / 1000).toFixed(2) + " km" : Math.round(meters) + " m"} · ${language === "fr" ? "par route" : "by road"}`
+      : `${meters >= 1000 ? (meters / 1000).toFixed(2) + " km" : Math.round(meters) + " m"} · ${language === "fr" ? "direct" : "direct"}`;
   }
 }
 
@@ -1683,6 +1701,16 @@ function closeBuildingInterior(): void {
   $("#building-interior").hidden = true;
 }
 
+function findSafeSpawn(lng: number, lat: number): [number, number, boolean] {
+  if (!isBuildingCollision(lng, lat)) return [lng, lat, false];
+  const bearings = [{ x: 1, y: 0 }, { x: 0.707, y: 0.707 }, { x: 0, y: 1 }, { x: -0.707, y: 0.707 }, { x: -1, y: 0 }, { x: -0.707, y: -0.707 }, { x: 0, y: -1 }, { x: 0.707, y: -0.707 }];
+  for (const distance of [8, 14, 22, 32, 44, 58, 74]) for (const direction of bearings) {
+    const candidate = destinationFromDirection({ lng, lat }, direction, distance);
+    if (!isBuildingCollision(candidate.lng, candidate.lat)) return [candidate.lng, candidate.lat, true];
+  }
+  return [lng, lat, false];
+}
+
 function startGameMode(resumeSession: SavedGameSession | null = null, requestedSpawn?: [number, number]): void {
   if (!map.isStyleLoaded()) {
     showToast(language === "en" ? "The world map is still loading. Please wait a moment." : "La carte du monde est en cours de chargement. Patientez un instant.");
@@ -1716,7 +1744,9 @@ function startGameMode(resumeSession: SavedGameSession | null = null, requestedS
     : resumeSession
       ? [resumeSession.lng, resumeSession.lat] as [number, number]
       : spawnForZone(currentZone.x, currentZone.y);
-  const spawn = new maplibregl.LngLat(spawnCoordinates[0], spawnCoordinates[1]);
+  const adjustedSpawn = findSafeSpawn(spawnCoordinates[0], spawnCoordinates[1]);
+  const spawn = new maplibregl.LngLat(adjustedSpawn[0], adjustedSpawn[1]);
+  if (adjustedSpawn[2]) showToast(language === "fr" ? "Point de départ déplacé vers un espace libre." : "Spawn moved to the nearest clear space.");
   if (resumeSession) {
     movementSpeed = resumeSession.movementSpeed > 12 ? 4.5 : Math.max(1, Math.min(12, resumeSession.movementSpeed));
     const speedControl = document.querySelector<HTMLInputElement>("#game-speed");
@@ -1734,8 +1764,16 @@ function startGameMode(resumeSession: SavedGameSession | null = null, requestedS
   player.setAttribute("aria-label", translations[language].playerAriaLabel);
   playerMarker?.remove();
   playerMarker = new maplibregl.Marker({ element: player, anchor: "center" }).setLngLat(spawn).addTo(map);
-  travelledRouteCoordinates = [[spawn.lng, spawn.lat]];
+  travelledRouteCoordinates = resumeSession?.travelledRoute?.length ? resumeSession.travelledRoute.slice(-1800) : [[spawn.lng, spawn.lat]];
+  if (!travelledRouteCoordinates.length) travelledRouteCoordinates = [[spawn.lng, spawn.lat]];
   lastRoutePoint = [spawn.lng, spawn.lat];
+  if (resumeSession?.destination) {
+    destinationCoordinates = [...resumeSession.destination];
+    const destinationElement = document.createElement("div"); destinationElement.className = "game-destination-marker";
+    destinationMarker?.remove(); destinationMarker = new maplibregl.Marker({ element: destinationElement, anchor: "center" }).setLngLat(destinationCoordinates).addTo(map);
+    const roads = map.querySourceFeatures("openmaptiles", { sourceLayer: "transportation" });
+    navigationRouteCoordinates = findRoadRoute(roads as unknown as Parameters<typeof findRoadRoute>[0], [spawn.lng, spawn.lat], destinationCoordinates) ?? [];
+  }
   updateTravelledRoute();
   map.easeTo({ center: spawn, zoom: resumeSession?.zoom ?? Math.max(16, map.getZoom()), pitch: 0, bearing: 0, duration: 850 });
   $("#app").classList.add("game-mode");
