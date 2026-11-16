@@ -8,6 +8,8 @@ export interface SavedGameSession {
   movementSpeed: number;
   zoom: number;
   savedAt: number;
+  destination?: [number, number] | null;
+  travelledRoute?: [number, number][];
 }
 
 export function isValidGameSession(
@@ -23,5 +25,7 @@ export function isValidGameSession(
     && Number.isFinite(session.movementSpeed) && (session.movementSpeed as number) >= 1 && (session.movementSpeed as number) <= 360
     && Number.isFinite(session.zoom) && (session.zoom as number) >= 0 && (session.zoom as number) <= 24
     && Number.isFinite(session.savedAt) && (session.savedAt as number) <= now
-    && now - (session.savedAt as number) <= maxAgeMs;
+    && now - (session.savedAt as number) <= maxAgeMs
+    && (session.destination === undefined || session.destination === null || (Array.isArray(session.destination) && session.destination.length === 2 && Number.isFinite(session.destination[0]) && session.destination[0] >= -180 && session.destination[0] <= 180 && Number.isFinite(session.destination[1]) && session.destination[1] >= -85.051129 && session.destination[1] <= 85.051129))
+    && (session.travelledRoute === undefined || (Array.isArray(session.travelledRoute) && session.travelledRoute.length <= 1800 && session.travelledRoute.every((point) => Array.isArray(point) && point.length === 2 && Number.isFinite(point[0]) && point[0] >= -180 && point[0] <= 180 && Number.isFinite(point[1]) && point[1] >= -85.051129 && point[1] <= 85.051129)));
 }
