@@ -78,10 +78,15 @@ export class Game {
     this.container.appendChild(this.renderer.domElement);
 
     this.buildWorld();
-    this.buildInteractiveArchitecture();
     this.buildMappedTerrain();
     this.buildMappedRoads();
     this.buildMappedBuildings();
+    this.mappedBuildingPlans.sort((a, b) => {
+      const ax = (a.bounds.minX + a.bounds.maxX) / 2, az = (a.bounds.minZ + a.bounds.maxZ) / 2;
+      const bx = (b.bounds.minX + b.bounds.maxX) / 2, bz = (b.bounds.minZ + b.bounds.maxZ) / 2;
+      return Math.hypot(ax, az) - Math.hypot(bx, bz);
+    });
+    this.buildInteractiveArchitecture();
     this.buildPlayer();
     this.restoreInteriorSession();
     this.camera.position.set(0, 5, 9);
@@ -162,7 +167,7 @@ export class Game {
     // Reusable fictional training-building prefab. It is deliberately separate
     // from OSM footprints: map data never supplies private indoor floor plans.
     const tags = this.worldData.buildings.map((feature) => (feature.properties ?? {}) as Record<string, unknown>);
-    this.activeInteriorKind = inferBuildingPrefabKind(tags, classifyBuilding);
+    this.activeInteriorKind = this.mappedBuildingPlans[0]?.kind ?? inferBuildingPrefabKind(tags, classifyBuilding);
     const prefab = getBuildingPrefab(this.activeInteriorKind);
     const layout = createInteriorLayout(this.activeInteriorKind);
     const wallMaterial = new THREE.MeshStandardMaterial({ color: prefab.wallColor, roughness: 0.92 });
