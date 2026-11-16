@@ -483,6 +483,8 @@ function updateExploredZonesLayer(): void {
   source.setData({ type: "FeatureCollection", features });
   const count = document.querySelector<HTMLElement>("#game-explored-count");
   if (count) count.textContent = String(exploredZones.size);
+  const miniMarker = document.querySelector<HTMLElement>(".mini-map-player-marker");
+  if (miniMarker) miniMarker.dataset.heading = playerHeading;
   updateMiniMapOverlays();
 }
 function recordExploredZone(zoneX: number, zoneY: number): void {
@@ -534,6 +536,65 @@ let miniMap: MapLibreMap | null = null;
 let miniMapReady = false;
 let lastMiniMapSyncAt = 0;
 let miniMapOverlaySignature = "";
+let spawnSelectionMode = false;
+let spawnSelectionMarker: maplibregl.Marker | null = null;
+let selectedSpawnCoordinates: [number, number] | null = null;
+
+function updateSpawnSelection(lng: number, lat: number): void {
+  selectedSpawnCoordinates = [lng, lat];
+  if (!spawnSelectionMarker) {
+    const marker = document.createElement("div");
+    marker.className = "spawn-preview-marker";
+    marker.setAttribute("aria-hidden", "true");
+    spawnSelectionMarker = new maplibregl.Marker({ element: marker, anchor: "center" }).setLngLat([lng, lat]).addTo(map);
+  } else {
+    spawnSelectionMarker.setLngLat([lng, lat]);
+  }
+  const label = document.querySelector<HTMLElement>("#spawn-picker-coordinates");
+  const confirm = document.querySelector<HTMLButtonElement>("#spawn-picker-confirm");
+  if (label) label.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  if (confirm) confirm.disabled = false;
+}
+
+function openSpawnPicker(): void {
+  if (!map.isStyleLoaded()) {
+    showToast(language === "en" ? "The world map is still loading. Please wait a moment." : "La carte du monde est en cours de chargement. Patientez un instant.");
+    return;
+  }
+  const home = document.querySelector<HTMLElement>("#home-screen");
+  const saves = document.querySelector<HTMLElement>("#resume-session");
+  if (home) home.hidden = true;
+  if (saves) saves.hidden = true;
+  spawnSelectionMode = true;
+  selectedSpawnCoordinates = null;
+  spawnSelectionMarker?.remove();
+  spawnSelectionMarker = null;
+  const label = document.querySelector<HTMLElement>("#spawn-picker-coordinates");
+  const confirm = document.querySelector<HTMLButtonElement>("#spawn-picker-confirm");
+  if (label) label.textContent = language === "fr" ? "Cliquez sur la carte pour choisir" : "Click the map to choose";
+  if (confirm) {
+    confirm.disabled = true;
+    confirm.textContent = language === "fr" ? "COMMENCER ICI" : "START HERE";
+  }
+  const title = document.querySelector<HTMLElement>("#spawn-picker-title");
+  const help = document.querySelector<HTMLElement>("#spawn-picker-help");
+  const cancel = document.querySelector<HTMLButtonElement>("#spawn-picker-cancel");
+  if (title) title.textContent = language === "fr" ? "Choisissez votre point de départ" : "Choose your starting point";
+  if (help) help.textContent = language === "fr" ? "Recherchez une ville dans le panneau ou cliquez directement sur la carte pour placer votre point de départ." : "Search for a city in the map panel, or click anywhere on the map to place your starting marker.";
+  if (cancel) cancel.textContent = language === "fr" ? "ANNULER" : "CANCEL";
+  document.querySelector<HTMLElement>("#spawn-picker")!.hidden = false;
+  map.dragPan.enable();
+  map.easeTo({ pitch: 0, bearing: 0, duration: 350 });
+}
+
+function closeSpawnPicker(): void {
+  spawnSelectionMode = false;
+  selectedSpawnCoordinates = null;
+  spawnSelectionMarker?.remove();
+  spawnSelectionMarker = null;
+  document.querySelector<HTMLElement>("#spawn-picker")!.hidden = true;
+}
+
 
 function updateMiniMapOverlays(): void {
   if (!miniMap || !miniMapReady) return;
@@ -724,6 +785,11 @@ function setLanguage(next: Language): void {
 
 
 function selectPlace(place: PlaceResult): void {
+  if (spawnSelectionMode) {
+    updateSpawnSelection(place.longitude, place.latitude);
+    map.flyTo({ center: [place.longitude, place.latitude], zoom: 15.5, pitch: 0, bearing: 0, duration: 1200, essential: true });
+    return;
+  }
   selectedPlaceMarker?.remove();
   const markerElement = document.createElement("div");
   markerElement.className = "place-marker";
@@ -1304,6 +1370,8 @@ function updatePlayerNavigationHud(): void {
   const speed = document.querySelector<HTMLElement>("#navigation-speed");
   const zoom = document.querySelector<HTMLElement>("#navigation-zoom");
   if (coordinates) coordinates.textContent = `${position.lat.toFixed(5)}, ${position.lng.toFixed(5)}`;
+  const miniMarker = document.querySelector<HTMLElement>(".mini-map-player-marker");
+  if (miniMarker) miniMarker.dataset.heading = playerHeading;
   if (heading) heading.textContent = playerHeading;
   if (speed) speed.textContent = movementSpeed.toFixed(1);
   if (zoom) zoom.textContent = `${map.getZoom().toFixed(1)}×`;
@@ -1530,7 +1598,7 @@ function closeBuildingInterior(): void {
   $("#building-interior").hidden = true;
 }
 
-function startGameMode(resumeSession: SavedGameSession | null = null): void {
+function startGameMode(resumeSession: SavedGameSession | null = null, requestedSpawn?: [number, number]): void {
   if (!map.isStyleLoaded()) {
     showToast(language === "en" ? "The world map is still loading. Please wait a moment." : "La carte du monde est en cours de chargement. Patientez un instant.");
     return;
@@ -1555,9 +1623,11 @@ function startGameMode(resumeSession: SavedGameSession | null = null): void {
   map.touchZoomRotate.disable();
   const current = map.getCenter();
   const currentZone = zoneFor(current.lng, current.lat);
-  const spawnCoordinates = resumeSession
-    ? [resumeSession.lng, resumeSession.lat] as [number, number]
-    : spawnForZone(currentZone.x, currentZone.y);
+  const spawnCoordinates = requestedSpawn
+    ? requestedSpawn
+    : resumeSession
+      ? [resumeSession.lng, resumeSession.lat] as [number, number]
+      : spawnForZone(currentZone.x, currentZone.y);
   const spawn = new maplibregl.LngLat(spawnCoordinates[0], spawnCoordinates[1]);
   if (resumeSession) {
     movementSpeed = resumeSession.movementSpeed > 12 ? 4.5 : Math.max(1, Math.min(12, resumeSession.movementSpeed));
@@ -1689,6 +1759,7 @@ function movementTick(time: number): void {
     void prefetchVectorTilesAhead(next.lng, next.lat, dx, dy);
     const playerElement = playerMarker.getElement();
     if (activeDirection) playerElement.dataset.direction = activeDirection.direction;
+    playerElement.dataset.heading = playerHeading;
     playerElement.classList.add("is-moving");
     $("#game-player-status").textContent = translations[language].playerReady;
     playerMarker.setLngLat(next);
@@ -1814,18 +1885,21 @@ map.on("error", (event) => {
 
 
 $("#home-play").addEventListener("click", () => {
-  if (!map.isStyleLoaded()) {
-    showToast(language === "en" ? "The world map is still loading. Please wait a moment." : "La carte du monde est en cours de chargement. Patientez un instant.");
-    return;
-  }
   if (savedGameSlots.length > 0) openHomeSaves();
-  else {
-    startGameMode();
-    if (gameMode) {
-      const home = document.querySelector<HTMLElement>("#home-screen");
-      if (home) home.hidden = true;
-    }
-  }
+  else openSpawnPicker();
+});
+$("#spawn-picker-cancel").addEventListener("click", () => {
+  closeSpawnPicker();
+  const home = document.querySelector<HTMLElement>("#home-screen");
+  if (home && savedGameSlots.length === 0) home.hidden = false;
+  else if (savedGameSlots.length > 0) openHomeSaves();
+});
+$("#spawn-picker-confirm").addEventListener("click", () => {
+  if (!selectedSpawnCoordinates) return;
+  const spawn = [...selectedSpawnCoordinates] as [number, number];
+  closeSpawnPicker();
+  startGameMode(null, spawn);
+  if (gameMode) document.querySelector<HTMLElement>("#home-screen")!.hidden = true;
 });
 $("#home-saves").addEventListener("click", openHomeSaves);
 $("#home-settings").addEventListener("click", openHomeSettings);
@@ -1949,9 +2023,7 @@ $("#resume-session-new").addEventListener("click", () => {
     return;
   }
   clearActiveSaveSlot();
-  const panel = document.querySelector<HTMLElement>("#resume-session");
-  if (panel) panel.hidden = true;
-  startGameMode();
+  openSpawnPicker();
 });
 
 $("#globe-view").addEventListener("click", () => setMapView("globe"));
@@ -2004,6 +2076,10 @@ $("#terrain-view").addEventListener("click", () => {
 $("#places-view").addEventListener("click", togglePointsOfInterest);
 
 map.on("click", (event) => {
+  if (spawnSelectionMode) {
+    updateSpawnSelection(event.lngLat.lng, event.lngLat.lat);
+    return;
+  }
   if (gameMode) {
     const building = map.getLayer("juju-game-buildings")
       ? map.queryRenderedFeatures(event.point, { layers: ["juju-game-buildings"] })[0]
