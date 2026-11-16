@@ -41,10 +41,19 @@ test("home screen, French localization and settings render at this viewport", as
   await expect(page.locator("#game-zone-status")).not.toContainText(/CHARGEMENT|LOADING/, { timeout: 30_000 });
   await expect(page.locator(".juju-player")).toBeVisible();
   const initialCoordinates = await page.locator("#navigation-coordinates").textContent();
-  await page.keyboard.down("w");
-  await page.waitForTimeout(900);
-  await page.keyboard.up("w");
-  await expect(page.locator("#navigation-coordinates")).not.toHaveText(initialCoordinates);
+  if (testInfo.project.use.isMobile) {
+    const moveButton = page.locator('[data-move="up"]');
+    await moveButton.hover();
+    await page.mouse.down();
+    await page.waitForTimeout(1100);
+    await page.mouse.up();
+  } else {
+    await page.locator("body").click({ position: { x: 8, y: 8 } });
+    await page.keyboard.down("w");
+    await page.waitForTimeout(900);
+    await page.keyboard.up("w");
+  }
+  await expect(page.locator("#navigation-coordinates")).not.toHaveText(initialCoordinates, { timeout: 8_000 });
   await expect(page.locator(".juju-player")).toHaveClass(/is-idle/);
   await page.locator(".game-hud").screenshot({ path: testInfo.outputPath("game-hud.png"), animations: "disabled" });
   await page.locator("#game-set-destination").click();
