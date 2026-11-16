@@ -57,22 +57,53 @@ export function findRoadRoute(features: RoadFeature[], start: Coordinate, end: C
   if (!source || !target) return null;
   const distances = new Map<string, number>([[source, 0]]);
   const previous = new Map<string, string>();
-  const queue = new Set<string>([source]);
-  while (queue.size) {
-    let current: string | null = null, best = Infinity;
-    for (const key of queue) {
-      const value = distances.get(key) ?? Infinity;
-      if (value < best) { best = value; current = key; }
+  const targetPoint = nodes.get(target)!;
+  const heuristic = (key: string): number => {
+    const point = nodes.get(key)!;
+    return haversineDistance({ lng: point[0], lat: point[1] }, { lng: targetPoint[0], lat: targetPoint[1] });
+  };
+  const open: { key: string; score: number }[] = [{ key: source, score: heuristic(source) }];
+  const closed = new Set<string>();
+  const push = (item: { key: string; score: number }): void => {
+    open.push(item);
+    let index = open.length - 1;
+    while (index > 0) {
+      const parent = Math.floor((index - 1) / 2);
+      if (open[parent].score <= open[index].score) break;
+      [open[parent], open[index]] = [open[index], open[parent]];
+      index = parent;
     }
-    if (!current || !Number.isFinite(best)) break;
+  };
+  const pop = (): { key: string; score: number } | undefined => {
+    const first = open[0], last = open.pop();
+    if (open.length && last) {
+      open[0] = last;
+      let index = 0;
+      while (true) {
+        const left = index * 2 + 1, right = left + 1;
+        let smallest = index;
+        if (left < open.length && open[left].score < open[smallest].score) smallest = left;
+        if (right < open.length && open[right].score < open[smallest].score) smallest = right;
+        if (smallest === index) break;
+        [open[index], open[smallest]] = [open[smallest], open[index]];
+        index = smallest;
+      }
+    }
+    return first;
+  };
+  while (open.length) {
+    const current = pop()!.key;
+    if (closed.has(current)) continue;
     if (current === target) break;
-    queue.delete(current);
+    closed.add(current);
+    const currentCost = distances.get(current) ?? Infinity;
     for (const edge of graph.get(current) ?? []) {
-      const candidate = best + edge.cost;
+      if (closed.has(edge.to)) continue;
+      const candidate = currentCost + edge.cost;
       if (candidate < (distances.get(edge.to) ?? Infinity)) {
         distances.set(edge.to, candidate);
         previous.set(edge.to, current);
-        queue.add(edge.to);
+        push({ key: edge.to, score: candidate + heuristic(edge.to) });
       }
     }
   }
