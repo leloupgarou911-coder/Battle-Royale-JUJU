@@ -1468,7 +1468,10 @@ function updateTravelledRoute(): void {
 function updateNavigationControl(): void {
   const button = document.querySelector<HTMLButtonElement>("#game-toggle-navigation");
   const state = document.querySelector<HTMLElement>("#navigation-state");
-  if (button) button.textContent = navigationActive ? (language === "fr" ? "ARRÊTER LE GUIDAGE" : "STOP GUIDANCE") : (language === "fr" ? "REPRENDRE LE GUIDAGE" : "RESUME GUIDANCE");
+  if (button) {
+    button.disabled = !destinationCoordinates || navigationRouteCoordinates.length < 2;
+    button.textContent = navigationActive ? (language === "fr" ? "ARRÊTER LE GUIDAGE" : "STOP GUIDANCE") : (language === "fr" ? "REPRENDRE LE GUIDAGE" : "RESUME GUIDANCE");
+  }
   if (state) state.textContent = navigationActive ? (language === "fr" ? "GUIDAGE ACTIF" : "AUTO FOLLOW") : (language === "fr" ? "EN PAUSE" : "PAUSED");
 }
 
@@ -1883,6 +1886,7 @@ function startGameMode(resumeSession: SavedGameSession | null = null, requestedS
   selectedPlaceMarker?.remove();
   selectedPlaceMarker = null;
   updateGameHud();
+  if (navigationActive) { updateNavigationControl(); startMovementLoop(); }
   lastSessionSaveAt = 0;
   saveGameSession();
   const spawnZone = zoneFor(spawn.lng, spawn.lat);
@@ -2062,10 +2066,12 @@ function startMovementLoop(): void {
 function setMovementKey(key: string, pressed: boolean): void {
   const normalized = key.toLowerCase();
   if (!directionKeys[normalized] || !gameMode) return;
-  if (pressed) heldDirections.add(normalized);
-  else heldDirections.delete(normalized);
+  if (pressed) {
+    heldDirections.add(normalized);
+    if (navigationActive) { navigationActive = false; updateNavigationControl(); }
+  } else heldDirections.delete(normalized);
   if (pressed) startMovementLoop();
-  if (!heldDirections.size) {
+  if (!heldDirections.size && !navigationActive) {
     if (movementFrame) window.cancelAnimationFrame(movementFrame);
     movementFrame = 0;
     previousMovementTime = 0;
