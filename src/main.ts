@@ -688,6 +688,8 @@ function createMiniMap(): void {
     miniMap.addLayer({ id: "juju-mini-destination-point", type: "circle", source: "juju-mini-destination", paint: { "circle-radius": 6, "circle-color": "#efbd58", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
     miniMap.addSource("juju-mini-navigation-route", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     miniMap.addLayer({ id: "juju-mini-navigation-route-line", type: "line", source: "juju-mini-navigation-route", paint: { "line-color": "#f0bd58", "line-width": 2.8, "line-dasharray": [1.5, 1] } });
+    miniMap.addSource("juju-mini-nearby-pois", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    miniMap.addLayer({ id: "juju-mini-nearby-pois-points", type: "circle", source: "juju-mini-nearby-pois", paint: { "circle-radius": 3.5, "circle-color": "#f4d27a", "circle-stroke-color": "#152a34", "circle-stroke-width": 1 } });
     miniMap.addSource("juju-mini-visited-zones", {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
@@ -1460,13 +1462,17 @@ function updatePlayerNavigationHud(): void {
     lastNearbyPoiUpdateAt = Date.now();
     const poiLayerReady = map.getLayer("juju-poi-points");
     const candidates = poiLayerReady ? map.queryRenderedFeatures([[0, 0], [map.getCanvas().width, map.getCanvas().height]], { layers: ["juju-poi-points"] }) : [];
+    const miniPoiFeatures: GeoJSON.Feature<GeoJSON.Point>[] = [];
     const nearest = candidates.map((feature) => {
       if (feature.geometry.type !== "Point") return null;
       const coords = feature.geometry.coordinates as [number, number];
       const props = feature.properties ?? {};
-      return { name: String(props.name ?? props.name_en ?? (language === "fr" ? "Lieu à proximité" : "Nearby place")), distance: haversineDistance(position, { lng: coords[0], lat: coords[1] }) };
+      const distance = haversineDistance(position, { lng: coords[0], lat: coords[1] });
+      if (distance <= 1800 && miniPoiFeatures.length < 100) miniPoiFeatures.push({ type: "Feature", properties: { name: String(props.name ?? props.name_en ?? "") }, geometry: { type: "Point", coordinates: coords } });
+      return { name: String(props.name ?? props.name_en ?? (language === "fr" ? "Lieu à proximité" : "Nearby place")), distance };
     }).filter((item): item is { name: string; distance: number } => !!item && item.distance <= 1500).sort((a, b) => a.distance - b.distance)[0];
     nearby.textContent = nearest ? `${nearest.name} · ${nearest.distance >= 1000 ? (nearest.distance / 1000).toFixed(1) + " km" : Math.round(nearest.distance) + " m"}` : (language === "fr" ? "Aucun lieu proche affiché" : "No nearby place in view");
+    (miniMap?.getSource("juju-mini-nearby-pois") as maplibregl.GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: miniPoiFeatures });
   }
   if (destinationCoordinates && destinationLabel && distanceLabel) {
     const [lng, lat] = destinationCoordinates;
@@ -1492,11 +1498,35 @@ function isBuildingCollision(lng: number, lat: number): boolean {
   const playerRadius = Math.max(2, Math.min(12, metersToScreenPixels(lng, lat, 5)));
   if (map.getLayer("juju-collision-buildings") && map.getZoom() >= 14) {
     const samples = collisionSampleOffsets(playerRadius);
-    const buildingHit = samples.some(([dx, dy]) => map.queryRenderedFeatures(
-      [point.x + dx, point.y + dy],
+    const candidates = map.queryRenderedFeatures(
+      [[point.x - playerRadius, point.y - playerRadius], [point.x + playerRadius, point.y + playerRadius]],
       { layers: ["juju-collision-buildings"] },
-    ).length > 0);
-    if (buildingHit) return true;
+    );
+    const pointInRing = (sampleX: number, sampleY: number, ring: unknown[]): boolean => {
+      let inside = false;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const a = ring[i] as [number, number], b = ring[j] as [number, number];
+        if (!Array.isArray(a) || !Array.isArray(b)) continue;
+        const pa = map.project(a), pb = map.project(b);
+        if ((pa.y > sampleY) !== (pb.y > sampleY)
+          && sampleX < ((pb.x - pa.x) * (sampleY - pa.y)) / ((pb.y - pa.y) || 0.000001) + pa.x) inside = !inside;
+      }
+      return inside;
+    };
+    for (const feature of candidates) {
+      const geometry = feature.geometry;
+      const polygons: unknown[][] = geometry.type === "Polygon"
+        ? (geometry.coordinates as unknown[][])
+        : geometry.type === "MultiPolygon" ? (geometry.coordinates as unknown[][][]).flat() : [];
+      for (const polygon of polygons) {
+        const outer = polygon[0] as unknown[];
+        if (!Array.isArray(outer)) continue;
+        for (const [dx, dy] of samples) {
+          const sx = point.x + dx, sy = point.y + dy;
+          if (pointInRing(sx, sy, outer) && !polygon.slice(1).some((hole) => pointInRing(sx, sy, hole as unknown[]))) return true;
+        }
+      }
+    }
   }
 
   // Check neighbouring procedural zones too, so an obstacle on a zone edge cannot be crossed.
