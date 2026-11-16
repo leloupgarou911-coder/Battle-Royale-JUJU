@@ -313,7 +313,7 @@ export class Game {
       };
       localStorage.setItem(this.getInteriorStorageKey(), JSON.stringify(state));
       this.worldData.onInteriorSave?.({
-        buildingId: `training-${this.worldData.saveSlotId ?? "local"}`,
+        buildingId: this.getInteriorBuildingId(),
         floor: this.interiorFloor,
         x: this.player.position.x, y: this.player.position.y, z: this.player.position.z,
         yaw: this.yaw, inside: this.insideDemoBuilding, savedAt: Date.now(),
@@ -328,7 +328,7 @@ export class Game {
   private restoreInteriorSession(): void {
     try {
       const raw = localStorage.getItem(this.getInteriorStorageKey());
-      const state = this.worldData.initialInterior ?? (raw ? JSON.parse(raw) as {
+      const savedSlotInterior = this.worldData.initialInterior?.buildingId === this.getInteriorBuildingId()\n        ? this.worldData.initialInterior : null;\n      const state = savedSlotInterior ?? (raw ? JSON.parse(raw) as {
         version?: number; inside?: boolean; floor?: number; position?: number[];
         outside?: number[]; yaw?: number; doorOpen?: boolean; savedAt?: number;
       } : null);
