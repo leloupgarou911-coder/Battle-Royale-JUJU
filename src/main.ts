@@ -680,6 +680,8 @@ function createMiniMap(): void {
     });
     miniMap.addSource("juju-mini-travelled-route", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     miniMap.addLayer({ id: "juju-mini-travelled-route-line", type: "line", source: "juju-mini-travelled-route", paint: { "line-color": "#70d8cb", "line-width": 2.5, "line-opacity": 0.95 } });
+    miniMap.addSource("juju-mini-destination", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    miniMap.addLayer({ id: "juju-mini-destination-point", type: "circle", source: "juju-mini-destination", paint: { "circle-radius": 6, "circle-color": "#efbd58", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
     miniMap.addSource("juju-mini-visited-zones", {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
@@ -1386,6 +1388,7 @@ function setPlayerDestination(lng: number, lat: number): void {
   const clear = document.querySelector<HTMLButtonElement>("#game-clear-destination");
   if (button) button.textContent = language === "fr" ? "MODIFIER LA DESTINATION" : "CHANGE DESTINATION";
   if (clear) clear.disabled = false;
+  updateTravelledRoute();
   updatePlayerNavigationHud();
   showToast(language === "fr" ? "Destination définie." : "Destination set.");
 }
@@ -1399,12 +1402,15 @@ function clearPlayerDestination(): void {
   if (distance) distance.textContent = "—";
   if (button) button.textContent = language === "fr" ? "DÉFINIR UNE DESTINATION" : "SET DESTINATION";
   if (clear) clear.disabled = true;
+  updateTravelledRoute();
   updatePlayerNavigationHud();
 }
 function updateTravelledRoute(): void {
   const data: GeoJSON.FeatureCollection<GeoJSON.LineString> = { type: "FeatureCollection", features: travelledRouteCoordinates.length > 1 ? [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: travelledRouteCoordinates } }] : [] };
   (map.getSource("juju-travelled-route") as maplibregl.GeoJSONSource | undefined)?.setData(data);
   (miniMap?.getSource("juju-mini-travelled-route") as maplibregl.GeoJSONSource | undefined)?.setData(data);
+  const destinationData: GeoJSON.FeatureCollection<GeoJSON.Point> = { type: "FeatureCollection", features: destinationCoordinates ? [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: destinationCoordinates } }] : [] };
+  (miniMap?.getSource("juju-mini-destination") as maplibregl.GeoJSONSource | undefined)?.setData(destinationData);
 }
 
 function updatePlayerNavigationHud(): void {
@@ -1879,6 +1885,7 @@ function setMovementKey(key: string, pressed: boolean): void {
     movementFrame = 0;
     previousMovementTime = 0;
     playerMarker?.getElement().classList.remove("is-moving");
+    playerMarker?.getElement().classList.add("is-idle");
   }
 }
 
