@@ -1102,3 +1102,23 @@ button:focus-visible,input:focus-visible{outline:2px solid #8fe2d9;outline-offse
   .spawn-picker-overlay { align-items: start; padding-top: 18px; }
   .spawn-picker-panel { width: min(390px, calc(100vw - 24px)); }
 }
+
+
+/* Stable facing and navigation destination readouts. */
+.game-mode .juju-player { transform: rotate(var(--facing, 0deg)); }
+.game-mode .juju-player[data-direction="up"] { --facing: 0deg; }
+.game-mode .juju-player[data-direction="right"] { --facing: 90deg; }
+.game-mode .juju-player[data-direction="down"] { --facing: 180deg; }
+.game-mode .juju-player[data-direction="left"] { --facing: -90deg; }
+.game-mode .juju-player.is-moving { animation: juju-player-bob .18s ease-in-out infinite alternate; }
+@keyframes juju-player-bob { from { translate: 0 0; } to { translate: 0 -3px; } }
+.game-destination-marker { width:22px;height:22px;border:3px solid #fff;border-radius:50% 50% 50% 2px;background:#efbd58;transform:rotate(-45deg);box-shadow:0 0 0 6px rgba(239,189,88,.2),0 3px 14px rgba(0,0,0,.62); }
+.navigation-destination { display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border:1px solid rgba(242,196,111,.2);border-radius:9px;background:rgba(242,196,111,.055); }
+.navigation-destination>div { display:grid;gap:4px;min-width:0; }
+.navigation-destination span { color:#9aaeb4;font-size:7px;font-weight:800;letter-spacing:.13em; }
+.navigation-destination strong { overflow:hidden;color:#f1e5c9;font:700 10px "DM Sans",sans-serif;text-overflow:ellipsis;white-space:nowrap; }
+.navigation-destination small { flex:0 0 auto;color:#f2c46f;font:700 11px "Space Grotesk",sans-serif; }
+.navigation-destination-actions { display:grid;grid-template-columns:1fr auto;gap:7px; }
+.navigation-destination-actions button { min-height:32px;padding:0 9px;border:1px solid rgba(242,196,111,.28);border-radius:7px;background:rgba(242,196,111,.08);color:#f4e4c5;font:800 8px "DM Sans",sans-serif;letter-spacing:.06em;cursor:pointer; }
+.navigation-destination-actions button:disabled { opacity:.35;cursor:not-allowed; }
+.navigation-destination-actions button:first-child { background:rgba(121,217,208,.12);border-color:rgba(121,217,208,.34);color:#bff5ed; }
