@@ -48,7 +48,8 @@ test("home screen, French localization and settings render at this viewport", as
     await page.waitForTimeout(1100);
     await page.mouse.up();
   } else {
-    await page.locator("body").click({ position: { x: 8, y: 8 } });
+    const mapCanvas = page.locator("#map .maplibregl-canvas").first();
+    await mapCanvas.click({ position: { x: 200, y: 160 } });
     await page.keyboard.down("w");
     await page.waitForTimeout(900);
     await page.keyboard.up("w");
