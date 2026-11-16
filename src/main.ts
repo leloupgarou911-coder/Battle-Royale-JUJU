@@ -38,6 +38,8 @@ let playerMarker: maplibregl.Marker | null = null;
 let destinationMarker: maplibregl.Marker | null = null;
 let destinationCoordinates: [number, number] | null = null;
 let destinationSelectionMode = false;
+let travelledRouteCoordinates: [number, number][] = [];
+let lastRoutePoint: [number, number] | null = null;
 let virtualEntranceMarker: maplibregl.Marker | null = null;
 let selectedBuildingName = "";
 let selectedBuildingType: BuildingKind = "other";
@@ -673,6 +675,8 @@ function createMiniMap(): void {
       source: "juju-mini-active-zone",
       paint: { "line-color": "#9af1e6", "line-width": 2.2, "line-opacity": 0.98 },
     });
+    miniMap.addSource("juju-mini-travelled-route", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    miniMap.addLayer({ id: "juju-mini-travelled-route-line", type: "line", source: "juju-mini-travelled-route", paint: { "line-color": "#70d8cb", "line-width": 2.5, "line-opacity": 0.95 } });
     miniMap.addSource("juju-mini-visited-zones", {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
@@ -1121,6 +1125,8 @@ function applyStreamingProfile(): void {
 
 function ensureGameLayers(): void {
   if (!map.getSource("openmaptiles")) return;
+  if (!map.getSource("juju-travelled-route")) map.addSource("juju-travelled-route", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  if (!map.getLayer("juju-travelled-route-line")) map.addLayer({ id: "juju-travelled-route-line", type: "line", source: "juju-travelled-route", paint: { "line-color": "#70d8cb", "line-width": 4, "line-opacity": 0.92 } });
 
   // Real-world land cover from OpenMapTiles, shown only in game mode.
   if (!map.getLayer("juju-game-greenery")) {
@@ -1390,6 +1396,12 @@ function clearPlayerDestination(): void {
   if (clear) clear.disabled = true;
   updatePlayerNavigationHud();
 }
+function updateTravelledRoute(): void {
+  const data: GeoJSON.FeatureCollection<GeoJSON.LineString> = { type: "FeatureCollection", features: travelledRouteCoordinates.length > 1 ? [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: travelledRouteCoordinates } }] : [] };
+  (map.getSource("juju-travelled-route") as maplibregl.GeoJSONSource | undefined)?.setData(data);
+  (miniMap?.getSource("juju-mini-travelled-route") as maplibregl.GeoJSONSource | undefined)?.setData(data);
+}
+
 function updatePlayerNavigationHud(): void {
   const position = playerMarker?.getLngLat() ?? map.getCenter();
   const coordinates = document.querySelector<HTMLElement>("#navigation-coordinates");
@@ -1404,6 +1416,12 @@ function updatePlayerNavigationHud(): void {
   if (zoom) zoom.textContent = `${map.getZoom().toFixed(1)}×`;
   const destinationLabel = document.querySelector<HTMLElement>("#navigation-destination");
   const distanceLabel = document.querySelector<HTMLElement>("#navigation-distance");
+  if (language === "fr") {
+    const button = document.querySelector<HTMLButtonElement>("#game-set-destination");
+    if (button) button.textContent = destinationCoordinates ? "MODIFIER LA DESTINATION" : "DÉFINIR UNE DESTINATION";
+    const label = document.querySelector<HTMLElement>("#navigation-destination");
+    if (!destinationCoordinates && label) label.textContent = "Aucune destination";
+  }
   if (destinationCoordinates && destinationLabel && distanceLabel) {
     const [lng, lat] = destinationCoordinates;
     const meters = haversineDistance(position, { lng, lat });
@@ -1644,6 +1662,8 @@ function startGameMode(resumeSession: SavedGameSession | null = null, requestedS
   }
   gameMode = true;
   clearPlayerDestination();
+  travelledRouteCoordinates = [];
+  lastRoutePoint = null;
   playerHeading = "N";
   createMiniMap();
   heldDirections.clear();
@@ -1682,6 +1702,9 @@ function startGameMode(resumeSession: SavedGameSession | null = null, requestedS
   player.setAttribute("aria-label", translations[language].playerAriaLabel);
   playerMarker?.remove();
   playerMarker = new maplibregl.Marker({ element: player, anchor: "center" }).setLngLat(spawn).addTo(map);
+  travelledRouteCoordinates = [[spawn.lng, spawn.lat]];
+  lastRoutePoint = [spawn.lng, spawn.lat];
+  updateTravelledRoute();
   map.easeTo({ center: spawn, zoom: resumeSession?.zoom ?? Math.max(16, map.getZoom()), pitch: 0, bearing: 0, duration: 850 });
   $("#app").classList.add("game-mode");
   $("#game-mode-toggle").textContent = translations[language].exitGame;
@@ -1803,6 +1826,12 @@ function movementTick(time: number): void {
     playerElement.classList.add("is-moving");
     $("#game-player-status").textContent = translations[language].playerReady;
     playerMarker.setLngLat(next);
+    if (!lastRoutePoint || haversineDistance({ lng: lastRoutePoint[0], lat: lastRoutePoint[1] }, next) >= 5) {
+      travelledRouteCoordinates.push([next.lng, next.lat]);
+      if (travelledRouteCoordinates.length > 1800) travelledRouteCoordinates.splice(1, 1);
+      lastRoutePoint = [next.lng, next.lat];
+      updateTravelledRoute();
+    }
     // The player is the camera anchor: keep the live map center locked to the same coordinates.
     map.jumpTo({ center: next });
     updateGameHud();
