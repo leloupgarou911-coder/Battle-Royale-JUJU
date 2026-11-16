@@ -1123,8 +1123,17 @@ button:focus-visible,input:focus-visible{outline:2px solid #8fe2d9;outline-offse
 .navigation-destination-actions button:disabled { opacity:.35;cursor:not-allowed; }
 .navigation-destination-actions button:first-child { background:rgba(121,217,208,.12);border-color:rgba(121,217,208,.34);color:#bff5ed; }
 
-.game-mode .game-navigation { display: grid !important; }
-@media (max-width:760px) { .game-mode .game-navigation { display: none !important; } }
+.game-mode .game-navigation { display: grid !important; position: fixed; z-index: 9; top: 18px; left: 18px; right: auto; bottom: auto; width: min(250px, calc(100vw - 470px)); max-height: min(48dvh, 360px); overflow-y: auto; }
+@media (max-width:760px) {
+  .game-mode .game-navigation { display: grid !important; top: 10px; left: 10px; right: auto; bottom: auto; width: min(190px, calc(100vw - 180px)); max-height: 34dvh; padding: 8px; gap: 7px; }
+  .game-mode .navigation-position { padding: 6px 0; }
+  .game-mode .navigation-position strong { font-size: 10px; }
+  .game-mode .navigation-destination { padding: 6px; }
+  .game-mode .navigation-destination-actions button { min-height: 29px; font-size: 7px; }
+  .game-mode .navigation-readouts { gap: 4px; }
+  .game-mode .navigation-readouts>div { padding: 5px; }
+  .game-mode .navigation-actions button { min-height: 28px; }
+}
 
 .navigation-nearby { display:grid;gap:5px;padding:8px 10px;border:1px solid rgba(117,217,208,.16);border-radius:8px;background:rgba(117,217,208,.045); }
 .navigation-nearby span { color:#829da8;font-size:7px;font-weight:800;letter-spacing:.13em; }
