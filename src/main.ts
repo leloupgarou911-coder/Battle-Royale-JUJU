@@ -8,6 +8,7 @@ import "./style.css";
 import { createZoneObstacles, legacyMercatorZoneCenter, spawnForZone, zoneAtOffset, zoneFor, zonePolygon } from "./game/zones.ts";
 import { destinationFromDirection, haversineDistance, normalizeDirection } from "./game/movement.ts";
 import { adjacentInteriorFloor, classifyBuilding, createInteriorLayout, type BuildingKind, type InteriorDoor, type InteriorObject } from "./game/interiors.ts";
+import { isValidSavedInterior, type SavedInteriorProgress } from "./game/buildingGenerator.ts";
 import { applyDailyMissionProgress, createDailyMissionState as createProgressDailyMissionState, emptyProgress, ensureDailyMissions as ensureProgressDailyMissions, normalizeProgress, recordDiscoveredCity, recordDiscoveredZone, recordTravelDistance, type DailyMissionState, type MissionHistoryEntry, type PlayerProgress } from "./game/progression.ts";
 import { isValidGameSession, type SavedGameSession } from "./game/saves.ts";
 import { detectStreamingProfile, type NetworkInformationLike, type StreamingProfile } from "./game/streaming.ts";
@@ -67,7 +68,7 @@ const SAVE_SLOTS_STORAGE_KEY = "juju-world-save-slots-v1";
 const SAVE_SLOT_LIMIT = 10;
 interface SavedGameSlot {
   id:string; name:string; session:SavedGameSession; progress:PlayerProgress;
-  dailyMissions?:DailyMissionState; missionHistory?:MissionHistoryEntry[];
+  dailyMissions?:DailyMissionState; missionHistory?:MissionHistoryEntry[]; interior?:SavedInteriorProgress;
   createdAt:number; updatedAt:number;
 }
 const localDateKey=():string=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");};
@@ -160,6 +161,7 @@ function loadSavedGameSlots(): void {
           progress: normalizeProgress(item.progress),
           dailyMissions: item.dailyMissions && typeof item.dailyMissions.date === "string" && Array.isArray(item.dailyMissions.missions) ? item.dailyMissions : createProgressDailyMissionState(localDateKey()),
           missionHistory: Array.isArray(item.missionHistory) ? item.missionHistory.filter((entry) => entry && typeof entry.id === "string" && typeof entry.date === "string" && Number.isFinite(entry.completedAt) && Number.isFinite(entry.rewardXp)).slice(-100) : [],
+          interior: isValidSavedInterior(item.interior) ? item.interior : undefined,
           session: {
             ...item.session,
             movementSpeed: item.session.movementSpeed > 12 ? 4.5 : Math.max(1, Math.min(12, item.session.movementSpeed)),
@@ -2252,7 +2254,23 @@ game3dButton?.addEventListener("click", () => {
       lastThreeDimensionalPosition = [lng, lat];
       const readout = document.querySelector<HTMLElement>("#game-3d-position");
       if (readout) readout.textContent = `3D · ${x.toFixed(1)} / ${z.toFixed(1)} m · ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-    }, { origin: [origin.lng, origin.lat], buildings: [...uniqueBuildings.values()], roads: mappedRoads, terrain: terrainSamples, terrainSize, terrainSegments });
+    }, {
+      origin: [origin.lng, origin.lat],
+      buildings: [...uniqueBuildings.values()],
+      roads: mappedRoads,
+      terrain: terrainSamples,
+      terrainSize,
+      terrainSegments,
+      saveSlotId: activeSlot()?.id ?? "local",
+      initialInterior: activeSlot()?.interior,
+      onInteriorSave: (state) => {
+        const slot = activeSlot();
+        if (!slot) return;
+        slot.interior = state;
+        slot.updatedAt = Date.now();
+        persistSavedGameSlots();
+      },
+    });
     activeThreeGame.start();
     const count = uniqueBuildings.size;
     const roadCount = mappedRoads.length;
