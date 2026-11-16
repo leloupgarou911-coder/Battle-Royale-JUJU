@@ -1125,3 +1125,7 @@ button:focus-visible,input:focus-visible{outline:2px solid #8fe2d9;outline-offse
 
 .game-mode .game-navigation { display: grid !important; }
 @media (max-width:760px) { .game-mode .game-navigation { display: none !important; } }
+
+.navigation-nearby { display:grid;gap:5px;padding:8px 10px;border:1px solid rgba(117,217,208,.16);border-radius:8px;background:rgba(117,217,208,.045); }
+.navigation-nearby span { color:#829da8;font-size:7px;font-weight:800;letter-spacing:.13em; }
+.navigation-nearby strong { overflow:hidden;color:#bdeee7;font:600 10px "DM Sans",sans-serif;text-overflow:ellipsis;white-space:nowrap; }
