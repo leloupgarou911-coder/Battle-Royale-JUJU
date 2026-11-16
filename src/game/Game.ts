@@ -47,7 +47,6 @@ export class Game {
   private demoDoorOpen = false;
   private exteriorReturnPosition = new THREE.Vector3();
   private interiorFloor = 0;
-  private interactionMessage = "";
 
 
   constructor(
