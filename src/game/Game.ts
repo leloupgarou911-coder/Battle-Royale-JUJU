@@ -13,6 +13,36 @@ interface GameWorldData { origin: [number, number]; buildings: MappedBuildingFea
 interface BuildingCollisionShape { minX: number; maxX: number; minZ: number; maxZ: number; rings: [number, number][][]; }
 interface ObstacleCollider { x: number; z: number; radius: number; }
 
+function createProceduralSurfaceTexture(baseHex: number, seamHex: number, pattern: "brick" | "tile"): THREE.DataTexture {
+  const size = 64;
+  const base = new THREE.Color(baseHex);
+  const seam = new THREE.Color(seamHex);
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const row = Math.floor(y / 16);
+      const shiftedX = pattern === "brick" ? (x + (row % 2) * 16) % 32 : x % 16;
+      const seamPixel = pattern === "brick"
+        ? y % 16 < 2 || shiftedX < 2
+        : x % 16 < 2 || y % 16 < 2;
+      const noise = ((x * 17 + y * 31) % 9 - 4) / 255;
+      const color = seamPixel ? seam : base;
+      const offset = (y * size + x) * 4;
+      data[offset] = Math.max(0, Math.min(255, Math.round(color.r * 255 + noise * 255)));
+      data[offset + 1] = Math.max(0, Math.min(255, Math.round(color.g * 255 + noise * 255)));
+      data[offset + 2] = Math.max(0, Math.min(255, Math.round(color.b * 255 + noise * 255)));
+      data[offset + 3] = 255;
+    }
+  }
+  const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(3, 3);
+  texture.needsUpdate = true;
+  return texture;
+}
+
 export class Game {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(65, 1, 0.1, 1200);
@@ -939,7 +969,7 @@ export class Game {
       if (object instanceof THREE.Mesh) {
         object.geometry.dispose();
         const materials = Array.isArray(object.material) ? object.material : [object.material];
-        materials.forEach((material) => material.dispose());
+        materials.forEach((material) => {\n          const textured = material as THREE.MeshStandardMaterial;\n          textured.map?.dispose();\n          material.dispose();\n        });
       }
     });
     this.renderer.dispose();
