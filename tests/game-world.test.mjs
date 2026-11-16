@@ -386,3 +386,12 @@ test("saved sessions validate optional destination and travelled route", async (
   assert.equal(isValidGameSession({ ...base, destination: [500, 36.8] }, now), false);
   assert.equal(isValidGameSession({ ...base, travelledRoute: Array.from({ length: 1801 }, () => [0, 0]) }, now), false);
 });
+
+
+test("road routing refuses distant snaps instead of drawing a fake straight connector", () => {
+  const roads = [
+    { geometry: { type: "LineString", coordinates: [[0, 0], [0.001, 0]] } },
+  ];
+  assert.equal(findRoadRoute(roads, [0.01, 0], [0.001, 0]), null);
+  assert.equal(findRoadRoute(roads, [0, 0], [0.001, 0]), null);
+});
