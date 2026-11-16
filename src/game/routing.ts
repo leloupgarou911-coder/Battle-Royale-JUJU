@@ -15,9 +15,14 @@ function lineParts(feature: RoadFeature): Coordinate[][] {
   const raw = geometry.type === "LineString"
     ? [geometry.coordinates]
     : geometry.type === "MultiLineString" ? geometry.coordinates as unknown[] : [];
-  return raw.map((part) => Array.isArray(part)
-    ? part.filter((point): point is Coordinate => Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1]) && Math.abs(point[0]) <= 180 && Math.abs(point[1]) <= 85.051129).map((point) => [point[0], point[1]])
-    : []).filter((line) => line.length >= 2);
+  const lines: Coordinate[][] = raw.map((part): Coordinate[] => {
+    if (!Array.isArray(part)) return [];
+    return part.filter((point): point is number[] => Array.isArray(point)
+      && Number.isFinite(point[0]) && Number.isFinite(point[1])
+      && Math.abs(point[0]) <= 180 && Math.abs(point[1]) <= 85.051129)
+      .map((point): Coordinate => [point[0], point[1]]);
+  });
+  return lines.filter((line) => line.length >= 2);
 }
 
 function nearestNode(nodes: Map<string, Coordinate>, point: Coordinate): string | null {
@@ -116,7 +121,7 @@ export function findRoadRoute(features: RoadFeature[], start: Coordinate, end: C
     if (cursor === source) break;
     cursor = previous.get(cursor);
   }
-  if (route.length < 2 || route[route.length - 1]?.[0] !== start[0] && route.length === 0) return null;
+  if (route.length < 2) return null;
   route.reverse();
   route.unshift(start);
   route.push(end);
