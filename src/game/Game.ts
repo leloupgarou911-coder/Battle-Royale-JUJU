@@ -227,9 +227,9 @@ export class Game {
 
   private groundHeightAt(x: number, z: number): number {
     if (!this.insideDemoBuilding) return this.terrainHeightAt(x, z);
-    if (z > -12.15) return this.interiorFloor === 1 ? 3.2 : 0;
+    if (z > -12.15) return x > 3.2 || this.interiorFloor === 1 ? 3.2 : 0;
     if (x > 3.55 && x < 5.55 && z >= -19.1 && z <= -12.15) {
-      return THREE.MathUtils.clamp((-12.15 - z) / 6.95, 0, 1) * 3.2;
+      return THREE.MathUtils.clamp((z + 19.0) / 6.85, 0, 1) * 3.2;
     }
     return 0;
   }
@@ -264,6 +264,8 @@ export class Game {
       this.exteriorReturnPosition.copy(this.player.position);
       this.insideDemoBuilding = true;
       this.interiorRoot.visible = true;
+      const roof = this.scene.getObjectByName("training-building-roof");
+      if (roof) roof.visible = false;
       this.player.position.set(0, 0, -10.5);
       this.verticalVelocity = 0;
       this.interiorFloor = 0;
@@ -275,6 +277,8 @@ export class Game {
     if (nearExit) {
       this.insideDemoBuilding = false;
       this.interiorRoot.visible = false;
+      const roof = this.scene.getObjectByName("training-building-roof");
+      if (roof) roof.visible = true;
       this.player.position.copy(this.exteriorReturnPosition);
       this.verticalVelocity = 0;
       this.demoDoorOpen = false;
