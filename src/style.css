@@ -1122,3 +1122,6 @@ button:focus-visible,input:focus-visible{outline:2px solid #8fe2d9;outline-offse
 .navigation-destination-actions button { min-height:32px;padding:0 9px;border:1px solid rgba(242,196,111,.28);border-radius:7px;background:rgba(242,196,111,.08);color:#f4e4c5;font:800 8px "DM Sans",sans-serif;letter-spacing:.06em;cursor:pointer; }
 .navigation-destination-actions button:disabled { opacity:.35;cursor:not-allowed; }
 .navigation-destination-actions button:first-child { background:rgba(121,217,208,.12);border-color:rgba(121,217,208,.34);color:#bff5ed; }
+
+.game-mode .game-navigation { display: grid !important; }
+@media (max-width:760px) { .game-mode .game-navigation { display: none !important; } }
