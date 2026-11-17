@@ -394,3 +394,299 @@ test("road routing refuses distant snaps instead of drawing a fake straight conn
   ];
   assert.equal(findRoadRoute(roads, [0.01, 0], [0.001, 0]), null);
 });
+
+test("osmWorld classifies real OSM features, clears vegetation off roads/buildings, and never invents sparse buildings", async () => {
+  const { buildOsmWorldSnapshot, ARENA_PRESET_DROPS } = await import("../src/game/osmWorld.ts");
+  assert.equal(ARENA_PRESET_DROPS.length, 5);
+
+  const origin = [2.3376, 48.8606];
+  const buildingPoly = {
+    type: "Feature",
+    id: "b-1",
+    properties: { building: "school", "building:levels": "3", name: "Ecole Rivoli" },
+    geometry: {
+      type: "Polygon",
+      coordinates: [[[2.3376, 48.8606], [2.3379, 48.8606], [2.3379, 48.8608], [2.3376, 48.8608], [2.3376, 48.8606]]],
+    },
+  };
+  const parkPoly = {
+    type: "Feature",
+    id: "p-1",
+    properties: { class: "park" },
+    geometry: {
+      type: "Polygon",
+      coordinates: [[[2.3370, 48.8600], [2.3385, 48.8600], [2.3385, 48.8612], [2.3370, 48.8612], [2.3370, 48.8600]]],
+    },
+  };
+  const primaryRoad = {
+    type: "Feature",
+    id: "r-1",
+    properties: { class: "primary" },
+    geometry: {
+      type: "LineString",
+      coordinates: [[2.3368, 48.8605], [2.3388, 48.8605]],
+    },
+  };
+  const monumentPoi = {
+    type: "Feature",
+    id: "poi-1",
+    properties: { class: "monument", name: "Colonne Test" },
+    geometry: {
+      type: "Point",
+      coordinates: [2.3381, 48.8609],
+    },
+  };
+
+  const richWorld = buildOsmWorldSnapshot({
+    origin,
+    buildings: [buildingPoly],
+    roads: [primaryRoad],
+    greens: [parkPoly],
+    waters: [],
+    pois: [monumentPoi],
+    radiusMeters: 210,
+  });
+
+  assert.equal(richWorld.buildings.length, 1);
+  assert.equal(richWorld.buildings[0].kind, "school");
+  assert.equal(richWorld.buildings[0].floors, 3);
+  assert.ok(richWorld.buildings[0].entrancePoint !== null);
+  assert.equal(richWorld.roads.length, 1);
+  assert.equal(richWorld.roads[0].category, "primary");
+  assert.equal(richWorld.roads[0].hasCenterLine, true);
+  assert.equal(richWorld.landmarks.length, 1);
+  assert.equal(richWorld.landmarks[0].category, "monument");
+  assert.ok(richWorld.vegetation.some((v) => v.source === "osm-greenspace-fill"));
+
+  // Sparse terrain with zero OSM features must report sparse and spawn 0 fake buildings
+  const sparseWorld = buildOsmWorldSnapshot({
+    origin: [5.5228, 22.785],
+    buildings: [],
+    roads: [],
+    greens: [],
+    waters: [],
+    pois: [],
+    radiusMeters: 210,
+  });
+  assert.equal(sparseWorld.dataRichness, "sparse");
+  assert.equal(sparseWorld.buildings.length, 0);
+  assert.ok(sparseWorld.vegetation.every((v) => v.source === "procedural-sparse"));
+});
+
+test("multiplayer ArenaSessionManager anchors objectives on OSM landmarks and isolates simulated bots", async () => {
+  const { buildOsmWorldSnapshot } = await import("../src/game/osmWorld.ts");
+  const { ArenaSessionManager, buildObjectivesFromOsmWorld, generateRoomCode } = await import("../src/game/multiplayer.ts");
+
+  const code = generateRoomCode(0.42);
+  assert.match(code, /^JUJU-[A-Z0-9]{4}$/);
+
+  const world = buildOsmWorldSnapshot({
+    origin: [2.3376, 48.8606],
+    buildings: [],
+    roads: [
+      {
+        type: "Feature",
+        id: "road-1",
+        properties: { class: "residential" },
+        geometry: { type: "LineString", coordinates: [[2.3379, 48.8606], [2.3388, 48.8606]] },
+      },
+    ],
+    greens: [],
+    waters: [],
+    pois: [
+      {
+        type: "Feature",
+        id: "poi-m",
+        properties: { class: "monument", name: "Arc Test" },
+        geometry: { type: "Point", coordinates: [2.3382, 48.8608] },
+      },
+    ],
+  });
+
+  const objectives = buildObjectivesFromOsmWorld(world, "zone_control");
+  assert.ok(objectives.length >= 1);
+  assert.equal(objectives[0].title, "Arc Test");
+  assert.equal(buildObjectivesFromOsmWorld(world, "free_roam").length, 0);
+
+  const session = new ArenaSessionManager();
+  try {
+    session.configureMode("zone_control", world, { simulationBots: true });
+    const botState = session.getState();
+    assert.equal(botState.simulationBotsEnabled, true);
+    assert.ok(botState.participants.some((p) => p.isSimulated === true));
+    assert.equal(botState.zone.active, true);
+
+    // Disable simulation bots so objective capture is uncontested by Bravo bots
+    session.setSimulationBots(false);
+    const target = botState.objectives[0];
+    let capturedState = session.getState();
+    for (let i = 0; i < 12; i += 1) {
+      capturedState = session.update(0.35, { x: target.x, z: target.z, yaw: 0, speed: 0 }, () => false);
+    }
+    assert.equal(capturedState.objectives[0].owner, "alpha");
+    assert.ok(capturedState.alphaScore > 0);
+  } finally {
+    session.dispose();
+  }
+});
+
+test("geoDataEngine decodes Terrarium RGB, covers tile bounds, and separates network errors from sparse real zones", async () => {
+  const {
+    decodeTerrariumRgb,
+    lngLatToTile,
+    tilesCoveringRadius,
+    classifyAreaDiagnostics,
+  } = await import("../src/game/geoDataEngine.ts");
+
+  // Sea level (0m) in Terrarium is (128, 0, 0) -> (128*256 + 0 + 0) - 32768 = 0
+  assert.equal(decodeTerrariumRgb(128, 0, 0), 0);
+  // Mont Blanc (~4808m) -> 32768 + 4808 = 37576 -> R=146 (37376), G=200 (200), B=0
+  assert.equal(Math.round(decodeTerrariumRgb(146, 200, 0)), 4808);
+
+  const parisTile = lngLatToTile(2.3348, 48.8648, 14);
+  assert.equal(parisTile.z, 14);
+  assert.ok(parisTile.x > 8000 && parisTile.y > 5000);
+  const covered = tilesCoveringRadius(2.3348, 48.8648, 230, 14);
+  assert.ok(covered.length >= 1 && covered.length <= 4);
+
+  const errorDiag = classifyAreaDiagnostics({
+    origin: [2.3348, 48.8648],
+    regionName: "Paris",
+    tilesRequested: 2,
+    tilesReceived: 0,
+    tileErrors: 2,
+    cacheHits: 0,
+    fetchMs: 50,
+    datasetVersion: "test",
+    sourcesUsed: ["OpenFreeMap"],
+    elevationStatus: "error",
+    originElevationMeters: null,
+    minElevationDelta: 0,
+    maxElevationDelta: 0,
+    buildingsCount: 0,
+    roadsCount: 0,
+    greensCount: 0,
+    watersCount: 0,
+    poisCount: 0,
+    landusesCount: 0,
+    places: [],
+    peaks: [],
+    heritageCount: 0,
+    landcovers: [],
+    errors: ["MVT HTTP 503"],
+  });
+  assert.equal(errorDiag.status, "error");
+  assert.ok(errorDiag.missingCategories.includes("buildings"));
+
+  const sparseDiag = classifyAreaDiagnostics({
+    origin: [5.5228, 22.785],
+    regionName: "Tamanrasset",
+    tilesRequested: 1,
+    tilesReceived: 1,
+    tileErrors: 0,
+    cacheHits: 0,
+    fetchMs: 40,
+    datasetVersion: "test",
+    sourcesUsed: ["OpenFreeMap"],
+    elevationStatus: "available",
+    originElevationMeters: 1370,
+    minElevationDelta: -2,
+    maxElevationDelta: 12,
+    buildingsCount: 0,
+    roadsCount: 0,
+    greensCount: 0,
+    watersCount: 0,
+    poisCount: 0,
+    landusesCount: 0,
+    places: [],
+    peaks: [],
+    heritageCount: 0,
+    landcovers: [],
+    errors: [],
+  });
+  assert.equal(sparseDiag.status, "sparse_real");
+});
+
+test("osmWorld enriches OpenFreeMap buildings from landuse/POIs, handles bridge/tunnel roads, coastal sand, peaks and heritage", async () => {
+  const { buildOsmWorldSnapshot } = await import("../src/game/osmWorld.ts");
+
+  const origin = [2.3348, 48.8648];
+  const world = buildOsmWorldSnapshot({
+    origin,
+    buildings: [
+      {
+        type: "Feature",
+        id: "ofm-b1",
+        properties: { render_height: 16, colour: "#d8c4a0" },
+        geometry: {
+          type: "Polygon",
+          coordinates: [[[2.3347, 48.8647], [2.3349, 48.8647], [2.3349, 48.8649], [2.3347, 48.8649], [2.3347, 48.8647]]],
+        },
+      },
+    ],
+    landuses: [
+      {
+        type: "Feature",
+        id: "lu-school",
+        properties: { class: "school" },
+        geometry: {
+          type: "Polygon",
+          coordinates: [[[2.3345, 48.8645], [2.3352, 48.8645], [2.3352, 48.8652], [2.3345, 48.8652], [2.3345, 48.8645]]],
+        },
+      },
+    ],
+    roads: [
+      {
+        type: "Feature",
+        id: "r-bridge",
+        properties: { class: "secondary", brunnel: "bridge" },
+        geometry: { type: "LineString", coordinates: [[2.3340, 48.8644], [2.3356, 48.8644]] },
+      },
+      {
+        type: "Feature",
+        id: "r-tunnel",
+        properties: { class: "primary", brunnel: "tunnel" },
+        geometry: { type: "LineString", coordinates: [[2.3340, 48.8646], [2.3356, 48.8646]] },
+      },
+    ],
+    landcovers: [
+      {
+        type: "Feature",
+        id: "lc-sand",
+        properties: { class: "sand" },
+        geometry: {
+          type: "Polygon",
+          coordinates: [[[2.3338, 48.8640], [2.3344, 48.8640], [2.3344, 48.8643], [2.3338, 48.8643], [2.3338, 48.8640]]],
+        },
+      },
+    ],
+    peaks: [
+      {
+        type: "Feature",
+        id: "pk-1",
+        properties: { name: "Mont Test", ele: 2450 },
+        geometry: { type: "Point", coordinates: [2.3350, 48.8650] },
+      },
+    ],
+    heritageSites: [
+      {
+        id: "wiki-99",
+        name: "Palais Garnier",
+        lng: 2.3316,
+        lat: 48.8719,
+        distanceMeters: 210,
+        source: "wikipedia",
+      },
+    ],
+  });
+
+  assert.equal(world.buildings[0].kind, "school");
+  assert.equal(world.buildings[0].wallColor, 0xd8c4a0);
+  assert.equal(world.roads.find((r) => r.id.includes("r-bridge"))?.brunnel, "bridge");
+  assert.equal(world.roads.find((r) => r.id.includes("r-tunnel"))?.brunnel, "tunnel");
+  assert.ok(world.greens.some((g) => g.category === "sand"));
+  assert.ok(world.landmarks.some((l) => l.category === "peak" && l.elevationMeters === 2450));
+  assert.ok(world.streetFurniture.every((f) => f.source === "procedural-street-furniture"));
+});
+
+

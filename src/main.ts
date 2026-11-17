@@ -16,7 +16,11 @@ import { circlesOverlap, collisionSampleOffsets } from "./game/collisions.ts";
 
 import { translations, type Language } from "./i18n/translations.ts";
 import { Game } from "./game/Game.ts";
+import type { GraphicsQualityTier } from "./game/worldVisuals.ts";
 import { findRoadRoute } from "./game/routing.ts";
+import { ARENA_PRESET_DROPS, localMetersToGeo, type OsmWorldSnapshot } from "./game/osmWorld.ts";
+import { GeoDataEngine, type GeoDataDiagnostics } from "./game/geoDataEngine.ts";
+import { generateRoomCode, type ArenaGameMode, type ArenaMatchState } from "./game/multiplayer.ts";
 
 const $ = <T extends HTMLElement>(selector: string): T => {
   const element = document.querySelector<T>(selector);
@@ -34,6 +38,7 @@ let terrainEnabled = false;
 let placesVisible = true;
 let toastTimeout = 0;
 let selectedPlaceMarker: maplibregl.Marker | null = null;
+let mapStyleReady = false;
 let gameMode = false;
 let playerMarker: maplibregl.Marker | null = null;
 let destinationMarker: maplibregl.Marker | null = null;
@@ -54,6 +59,20 @@ let activeZoneKey = "";
 let interiorPosition = { x: 2, y: 4 };
 let interiorLastDirection = "down";
 let interiorLastMessage = "";
+let activeThreeGame: Game | null = null;
+let lastThreeDimensionalPosition: [number, number] | null = null;
+let lastThreeDimensionalGeoPos: maplibregl.LngLat | null = null;
+let game3dSprintActive = false;
+let arenaChunkOrigin: [number, number] = [0, 0];
+let arenaPlaceTitle = "";
+let chunkRefreshInFlight = false;
+let currentArenaMode: ArenaGameMode = "free_roam";
+let currentRoomCode = generateRoomCode();
+let currentSimBots = false;
+let userSelectedQuality: GraphicsQualityTier | null = null;
+const geoDataEngine = new GeoDataEngine();
+let activeWorldAbort: AbortController | null = null;
+let currentGeoDiagnostics: GeoDataDiagnostics | null = null;
 const browserCapabilities = navigator as Navigator & { connection?: NetworkInformationLike; deviceMemory?: number };
 function currentStreamingProfile(): StreamingProfile {
   return detectStreamingProfile({
@@ -155,6 +174,8 @@ function renderPlayerProgress():void {
 let savedGameSlots: SavedGameSlot[] = [];
 let activeSaveSlotId: string | null = null;
 let lastSessionSaveAt = 0;
+let deletePendingSlotId: string | null = null;
+let deleteConfirmTimer = 0;
 function loadSavedGameSlots(): void {
   try {
     const raw = localStorage.getItem(SAVE_SLOTS_STORAGE_KEY);
@@ -266,13 +287,59 @@ function createNamedSaveSlot(): void {
     input?.focus();
     return;
   }
+  const sourceSlot = activeSlot();
+  if (!gameMode && !playerMarker && !sourceSlot) {
+    showToast(language === "fr"
+      ? "Lancez d’abord une exploration pour pouvoir la sauvegarder."
+      : "Start an exploration before creating a save.");
+    return;
+  }
   const now = Date.now();
-  const session = currentSessionSnapshot();
+  const session = (gameMode && playerMarker)
+    ? currentSessionSnapshot()
+    : sourceSlot
+      ? {
+          ...sourceSlot.session,
+          destination: sourceSlot.session.destination ? [...sourceSlot.session.destination] as [number, number] : null,
+          travelledRoute: sourceSlot.session.travelledRoute ? sourceSlot.session.travelledRoute.map((pt) => [...pt] as [number, number]) : [],
+          savedAt: now,
+        }
+      : currentSessionSnapshot();
+  const clonedProgress: PlayerProgress = sourceSlot
+    ? {
+        xp: sourceSlot.progress.xp,
+        distanceMeters: sourceSlot.progress.distanceMeters,
+        remainder: sourceSlot.progress.remainder,
+        zones: [...sourceSlot.progress.zones],
+        cities: [...sourceSlot.progress.cities],
+        achievements: [...sourceSlot.progress.achievements],
+      }
+    : emptyProgress();
+  const clonedMissions = sourceSlot?.dailyMissions
+    ? {
+        date: sourceSlot.dailyMissions.date,
+        missions: sourceSlot.dailyMissions.missions.map((m) => ({ ...m })),
+      }
+    : undefined;
+  const clonedHistory = sourceSlot?.missionHistory
+    ? sourceSlot.missionHistory.map((h) => ({ ...h }))
+    : [];
+  const clonedInterior = sourceSlot?.interior
+    ? {
+        ...sourceSlot.interior,
+        outside: sourceSlot.interior.outside
+          ? [...sourceSlot.interior.outside] as [number, number, number]
+          : undefined,
+      }
+    : undefined;
   const slot: SavedGameSlot = {
     id: `save-${now}-${Math.random().toString(36).slice(2, 7)}`,
     name,
     session,
-    progress: emptyProgress(),
+    progress: clonedProgress,
+    dailyMissions: clonedMissions,
+    missionHistory: clonedHistory,
+    interior: clonedInterior,
     createdAt: now,
     updatedAt: now,
   };
@@ -282,21 +349,30 @@ function createNamedSaveSlot(): void {
   persistSavedGameSlots();
   if (input) input.value = "";
   renderSavedGameSlots();
+  renderPlayerProgress();
+  renderDailyMissions();
   showToast(language === "en" ? "New save created." : "Nouvelle sauvegarde créée.");
 }
 function resumeSavedSlot(slotId: string): void {
   const slot = savedGameSlots.find((item) => item.id === slotId);
   if (!slot) return;
+  deletePendingSlotId = null;
+  window.clearTimeout(deleteConfirmTimer);
   activeSaveSlotId = slot.id;
-  startGameMode(slot.session);
+  syncExploredZonesFromProgress(slot.progress.zones);
+  void launchThreeArena(slot.session.lng, slot.session.lat, slot.session, slot.name);
 }
 function deleteSavedSlot(slotId: string): void {
+  deletePendingSlotId = null;
+  window.clearTimeout(deleteConfirmTimer);
   savedGameSlots = savedGameSlots.filter((item) => item.id !== slotId);
   if (activeSaveSlotId === slotId) {
     activeSaveSlotId = null;
   }
   persistSavedGameSlots();
   renderSavedGameSlots();
+  renderPlayerProgress();
+  renderDailyMissions();
 }
 function renderSavedGameSlots(): void {
   const list = document.querySelector<HTMLElement>("#save-slots-list");
@@ -321,11 +397,29 @@ function renderSavedGameSlots(): void {
     resume.type = "button";
     resume.textContent = language === "fr" ? "REPRENDRE" : "RESUME";
     resume.addEventListener("click", () => resumeSavedSlot(slot.id));
+    const isConfirming = deletePendingSlotId === slot.id;
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.textContent = language === "fr" ? "SUPPRIMER" : "DELETE";
+    if (isConfirming) remove.classList.add("is-confirming");
+    remove.textContent = isConfirming
+      ? translations[language].confirmDelete
+      : (language === "fr" ? "SUPPRIMER" : "DELETE");
     remove.setAttribute("aria-label", `${language === "fr" ? "Supprimer" : "Delete"} ${slot.name}`);
-    remove.addEventListener("click", () => deleteSavedSlot(slot.id));
+    remove.addEventListener("click", () => {
+      if (deletePendingSlotId === slot.id) {
+        deleteSavedSlot(slot.id);
+        return;
+      }
+      deletePendingSlotId = slot.id;
+      window.clearTimeout(deleteConfirmTimer);
+      deleteConfirmTimer = window.setTimeout(() => {
+        if (deletePendingSlotId === slot.id) {
+          deletePendingSlotId = null;
+          renderSavedGameSlots();
+        }
+      }, 4000);
+      renderSavedGameSlots();
+    });
     actions.append(resume, remove);
     item.append(info, actions);
     list.append(item);
@@ -497,7 +591,7 @@ function updateExploredZonesLayer(): void {
   if (count) count.textContent = String(exploredZones.size);
   const miniMarker = document.querySelector<HTMLElement>(".mini-map-player-marker");
   if (miniMarker) miniMarker.dataset.heading = playerHeading;
-  updateMiniMapOverlays();
+  updateMiniMapOverlaysAt(map.getCenter().lng, map.getCenter().lat);
 }
 function recordExploredZone(zoneX: number, zoneY: number): void {
   const key = `${zoneX}:${zoneY}`;
@@ -520,6 +614,19 @@ function clearExploredZones(): void {
   }
   updateExploredZonesLayer();
   showToast(translations[language].exploredCleared);
+}
+function syncExploredZonesFromProgress(zones: string[]): void {
+  exploredZones.clear();
+  const now = Date.now();
+  for (const key of zones.slice(-EXPLORED_ZONE_LIMIT)) {
+    const [rawX, rawY] = key.split(":");
+    const x = Number(rawX);
+    const y = Number(rawY);
+    if (!Number.isInteger(x) || !Number.isInteger(y)) continue;
+    exploredZones.set(`${x}:${y}`, { x, y, visitedAt: now });
+  }
+  saveExploredZones();
+  updateExploredZonesLayer();
 }
 loadExploredZones();
 
@@ -547,13 +654,42 @@ const map: MapLibreMap = new maplibregl.Map({
 let miniMap: MapLibreMap | null = null;
 let miniMapReady = false;
 let lastMiniMapSyncAt = 0;
+let lastMiniMapReadoutAt = 0;
+let lastMiniMapSyncLng = Number.NaN;
+let lastMiniMapSyncLat = Number.NaN;
+let lastMiniMapSyncHeading = "";
 let miniMapOverlaySignature = "";
 let spawnSelectionMode = false;
 let spawnSelectionMarker: maplibregl.Marker | null = null;
 let selectedSpawnCoordinates: [number, number] | null = null;
+let selectedSpawnPlaceLabel = "";
+let spawnCheckToken = 0;
 
-function updateSpawnSelection(lng: number, lat: number): void {
+function inferRenderedPlaceLabel(lng: number, lat: number): string {
+  try {
+    const pt = map.project([lng, lat]);
+    const box: [maplibregl.PointLike, maplibregl.PointLike] = [
+      [pt.x - 48, pt.y - 48],
+      [pt.x + 48, pt.y + 48],
+    ];
+    const features = map.queryRenderedFeatures(box);
+    const match = features.find((f) => {
+      const layerId = f.layer?.id ?? "";
+      const props = f.properties as Record<string, unknown> | undefined;
+      const name = props?.name ?? props?.name_en;
+      return typeof name === "string" && name.trim().length > 0 && /place|city|town|village|poi|label/i.test(layerId);
+    });
+    const rawName = match?.properties?.name ?? match?.properties?.name_en;
+    if (typeof rawName === "string" && rawName.trim()) return rawName.trim();
+  } catch {
+    // Ignore feature query errors when style tiles are partially loaded.
+  }
+  return translations[language].spawnPlaceUnknown;
+}
+
+function updateSpawnSelection(lng: number, lat: number, placeName?: string): void {
   selectedSpawnCoordinates = [lng, lat];
+  selectedSpawnPlaceLabel = placeName?.trim() || inferRenderedPlaceLabel(lng, lat);
   if (!spawnSelectionMarker) {
     const marker = document.createElement("div");
     marker.className = "spawn-preview-marker";
@@ -562,14 +698,42 @@ function updateSpawnSelection(lng: number, lat: number): void {
   } else {
     spawnSelectionMarker.setLngLat([lng, lat]);
   }
+  const placeEl = document.querySelector<HTMLElement>("#spawn-picker-place");
   const label = document.querySelector<HTMLElement>("#spawn-picker-coordinates");
   const confirm = document.querySelector<HTMLButtonElement>("#spawn-picker-confirm");
+  if (placeEl) placeEl.textContent = selectedSpawnPlaceLabel;
   if (label) label.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
   if (confirm) confirm.disabled = false;
 }
 
+function renderSpawnPresets(): void {
+  const container = document.querySelector<HTMLElement>("#spawn-presets");
+  if (!container) return;
+  container.replaceChildren();
+  ARENA_PRESET_DROPS.forEach((preset) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "spawn-preset-btn";
+    button.dataset.presetId = preset.id;
+    button.textContent = language === "fr" ? preset.nameFr : preset.nameEn;
+    if (selectedSpawnCoordinates
+      && Math.abs(selectedSpawnCoordinates[0] - preset.lng) < 0.0001
+      && Math.abs(selectedSpawnCoordinates[1] - preset.lat) < 0.0001) {
+      button.classList.add("active");
+    }
+    button.addEventListener("click", () => {
+      const label = language === "fr" ? preset.nameFr : preset.nameEn;
+      updateSpawnSelection(preset.lng, preset.lat, label);
+      container.querySelectorAll(".spawn-preset-btn").forEach((el) => el.classList.remove("active"));
+      button.classList.add("active");
+      map.flyTo({ center: [preset.lng, preset.lat], zoom: 16.4, pitch: 0, bearing: 0, duration: 900, essential: true });
+    });
+    container.append(button);
+  });
+}
+
 function openSpawnPicker(): void {
-  if (!map.isStyleLoaded()) {
+  if (!mapStyleReady && !map.isStyleLoaded()) {
     showToast(language === "en" ? "The world map is still loading. Please wait a moment." : "La carte du monde est en cours de chargement. Patientez un instant.");
     return;
   }
@@ -580,20 +744,24 @@ function openSpawnPicker(): void {
   spawnSelectionMode = true;
   document.querySelector<HTMLElement>("#app")?.classList.add("spawn-selecting");
   selectedSpawnCoordinates = null;
+  selectedSpawnPlaceLabel = "";
   spawnSelectionMarker?.remove();
   spawnSelectionMarker = null;
+  renderSpawnPresets();
+  const placeEl = document.querySelector<HTMLElement>("#spawn-picker-place");
   const label = document.querySelector<HTMLElement>("#spawn-picker-coordinates");
   const confirm = document.querySelector<HTMLButtonElement>("#spawn-picker-confirm");
-  if (label) label.textContent = language === "fr" ? "Cliquez sur la carte pour choisir" : "Click the map to choose";
+  if (placeEl) placeEl.textContent = "";
+  if (label) label.textContent = language === "fr" ? "Cliquez sur la carte ou choisissez un secteur" : "Click the map or choose a biome drop";
   if (confirm) {
     confirm.disabled = true;
-    confirm.textContent = language === "fr" ? "COMMENCER ICI" : "START HERE";
+    confirm.textContent = language === "fr" ? "DÉPLOYER EN 3D" : "DEPLOY IN 3D";
   }
   const title = document.querySelector<HTMLElement>("#spawn-picker-title");
   const help = document.querySelector<HTMLElement>("#spawn-picker-help");
   const cancel = document.querySelector<HTMLButtonElement>("#spawn-picker-cancel");
   if (title) title.textContent = language === "fr" ? "Choisissez votre point de départ" : "Choose your starting point";
-  if (help) help.textContent = language === "fr" ? "Recherchez une ville dans le panneau ou cliquez directement sur la carte pour placer votre point de départ." : "Search for a city in the map panel, or click anywhere on the map to place your starting marker.";
+  if (help) help.textContent = language === "fr" ? "Recherchez une ville, choisissez un secteur réel ou cliquez sur la carte pour vous déployer dans l'arène 3D." : "Search for a city, pick an instant biome drop, or click anywhere on the map to deploy in the 3D arena.";
   if (cancel) cancel.textContent = language === "fr" ? "ANNULER" : "CANCEL";
   document.querySelector<HTMLElement>("#spawn-picker")!.hidden = false;
   map.dragPan.enable();
@@ -604,15 +772,18 @@ function closeSpawnPicker(): void {
   spawnSelectionMode = false;
   document.querySelector<HTMLElement>("#app")?.classList.remove("spawn-selecting");
   selectedSpawnCoordinates = null;
+  selectedSpawnPlaceLabel = "";
+  const placeEl = document.querySelector<HTMLElement>("#spawn-picker-place");
+  if (placeEl) placeEl.textContent = "";
   spawnSelectionMarker?.remove();
   spawnSelectionMarker = null;
   document.querySelector<HTMLElement>("#spawn-picker")!.hidden = true;
 }
 
 
-function updateMiniMapOverlays(): void {
+function updateMiniMapOverlaysAt(lng: number, lat: number): void {
   if (!miniMap || !miniMapReady) return;
-  const active = zoneFor(map.getCenter().lng, map.getCenter().lat);
+  const active = zoneFor(lng, lat);
   const signature = `${active.key}|${[...exploredZones.keys()].join(",")}`;
   if (signature === miniMapOverlaySignature) return;
   miniMapOverlaySignature = signature;
@@ -628,34 +799,74 @@ function updateMiniMapOverlays(): void {
   });
 }
 
-function syncMiniMap(force = false): void {
-  if (!gameMode || !miniMap) return;
+function yawToCardinal(yaw: number): string {
+  // yaw 0 faces -Z (North)
+  const deg = ((-yaw * 180) / Math.PI + 360) % 360;
+  if (deg >= 337.5 || deg < 22.5) return "N";
+  if (deg < 67.5) return "NE";
+  if (deg < 112.5) return "E";
+  if (deg < 157.5) return "SE";
+  if (deg < 202.5) return "S";
+  if (deg < 247.5) return "SW";
+  if (deg < 292.5) return "W";
+  return "NW";
+}
+
+function syncMiniMapAt(lng: number, lat: number, heading = playerHeading, zoomOverride?: number, force = false): void {
+  if (!miniMap) return;
   const now = performance.now();
-  if (!force && now - lastMiniMapSyncAt < 140) return;
+  if (force || now - lastMiniMapReadoutAt >= 80) {
+    lastMiniMapReadoutAt = now;
+    const coordinates = document.querySelector<HTMLElement>("#mini-map-coordinates");
+    if (coordinates) coordinates.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    const miniMarker = document.querySelector<HTMLElement>(".mini-map-player-marker");
+    if (miniMarker) miniMarker.dataset.heading = heading;
+  }
+
+  const movedMeters = Number.isFinite(lastMiniMapSyncLng) && Number.isFinite(lastMiniMapSyncLat)
+    ? Math.hypot(
+        (lng - lastMiniMapSyncLng) * 111320 * Math.cos((lat * Math.PI) / 180),
+        (lat - lastMiniMapSyncLat) * 111320,
+      )
+    : Infinity;
+  const headingChanged = heading !== lastMiniMapSyncHeading;
+  if (!force) {
+    if (now - lastMiniMapSyncAt < 420) return;
+    if (movedMeters < 2.0 && !headingChanged) return;
+  }
+
   lastMiniMapSyncAt = now;
-  const center = map.getCenter();
+  lastMiniMapSyncLng = lng;
+  lastMiniMapSyncLat = lat;
+  lastMiniMapSyncHeading = heading;
+  const targetZoom = zoomOverride ?? Math.max(11, Math.min(16, map.getZoom() - 2));
   miniMap.jumpTo({
-    center,
-    zoom: Math.max(10, Math.min(16, map.getZoom() - 2.5)),
+    center: [lng, lat],
+    zoom: targetZoom,
     bearing: 0,
     pitch: 0,
   });
-  const coordinates = document.querySelector<HTMLElement>("#mini-map-coordinates");
-  if (coordinates) coordinates.textContent = `${center.lat.toFixed(3)}, ${center.lng.toFixed(3)}`;
-  updateMiniMapOverlays();
+  updateMiniMapOverlaysAt(lng, lat);
 }
 
-function createMiniMap(): void {
+function syncMiniMap(force = false): void {
+  if ((!gameMode && !activeThreeGame) || !miniMap) return;
+  const center = map.getCenter();
+  syncMiniMapAt(center.lng, center.lat, playerHeading, Math.max(10, Math.min(16, map.getZoom() - 2.5)), force);
+}
+
+function createMiniMap(initialCenter?: [number, number]): void {
   if (miniMap) {
     requestAnimationFrame(() => miniMap?.resize());
-    syncMiniMap(true);
+    if (initialCenter) syncMiniMapAt(initialCenter[0], initialCenter[1], playerHeading, 15, true);
+    else syncMiniMap(true);
     return;
   }
   miniMap = new maplibregl.Map({
     container: "game-mini-map",
     style: "https://tiles.openfreemap.org/styles/liberty",
-    center: map.getCenter(),
-    zoom: Math.max(10, Math.min(16, map.getZoom() - 2.5)),
+    center: initialCenter ?? map.getCenter(),
+    zoom: initialCenter ? 15 : Math.max(10, Math.min(16, map.getZoom() - 2.5)),
     minZoom: 9,
     maxZoom: 17,
     attributionControl: false,
@@ -692,6 +903,30 @@ function createMiniMap(): void {
     miniMap.addLayer({ id: "juju-mini-navigation-route-line", type: "line", source: "juju-mini-navigation-route", paint: { "line-color": "#f0bd58", "line-width": 2.8, "line-dasharray": [1.5, 1] } });
     miniMap.addSource("juju-mini-nearby-pois", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     miniMap.addLayer({ id: "juju-mini-nearby-pois-points", type: "circle", source: "juju-mini-nearby-pois", paint: { "circle-radius": 3.5, "circle-color": "#f4d27a", "circle-stroke-color": "#152a34", "circle-stroke-width": 1 } });
+    miniMap.addSource("juju-mini-objectives", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    miniMap.addLayer({
+      id: "juju-mini-objectives-points",
+      type: "circle",
+      source: "juju-mini-objectives",
+      paint: {
+        "circle-radius": 5,
+        "circle-color": ["match", ["get", "owner"], "alpha", "#62e8b0", "bravo", "#e9786b", "#f4c868"],
+        "circle-stroke-color": "#0c1d27",
+        "circle-stroke-width": 1.6,
+      },
+    });
+    miniMap.addSource("juju-mini-participants", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    miniMap.addLayer({
+      id: "juju-mini-participants-points",
+      type: "circle",
+      source: "juju-mini-participants",
+      paint: {
+        "circle-radius": 4.2,
+        "circle-color": ["match", ["get", "team"], "alpha", "#52c7e8", "#e96b5c"],
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 1.3,
+      },
+    });
     miniMap.addSource("juju-mini-visited-zones", {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
@@ -710,11 +945,21 @@ function createMiniMap(): void {
     miniMapReady = true;
     miniMapOverlaySignature = "";
     updateTravelledRoute();
-    syncMiniMap(true);
+    if (lastThreeDimensionalPosition) {
+      syncMiniMapAt(lastThreeDimensionalPosition[0], lastThreeDimensionalPosition[1], playerHeading, 15, true);
+    } else {
+      syncMiniMap(true);
+    }
   });
+  const markMiniTilesReady = () => {
+    if (miniMapReady && miniMap?.areTilesLoaded()) {
+      document.querySelector<HTMLElement>("#game-mini-map")?.setAttribute("data-tiles-ready", "true");
+    }
+  };
   miniMap.on("idle", () => {
     if (miniMapReady) document.querySelector<HTMLElement>("#game-mini-map")?.setAttribute("data-tiles-ready", "true");
   });
+  miniMap.on("sourcedata", markMiniTilesReady);
   miniMap.on("error", (event) => {
     if (event.error) console.warn("Mini-map resource error:", event.error.message);
   });
@@ -773,6 +1018,7 @@ function setLanguage(next: Language): void {
   playerMarker?.getElement().setAttribute("aria-label", translations[next].playerAriaLabel);
   renderPlayerProgress();
   renderDailyMissions();
+  renderSavedGameSlots();
   $("#language-toggle").textContent = next === "en" ? "FR" : "EN";
   $("#language-toggle").setAttribute("aria-label", next === "en" ? "Passer en français" : "Switch to English");
   const homeText = next === "fr" ? {
@@ -813,12 +1059,20 @@ function setLanguage(next: Language): void {
   setHomeText("#save-slots-back", next === "fr" ? "← MENU PRINCIPAL" : "← MAIN MENU");
   setHomeText("#home-dialog-close", "×");
   updatePlayerNavigationHud();
+  activeThreeGame?.setLanguage(next);
+  if (activeThreeGame) {
+    syncArenaDataBadge(activeThreeGame.getOsmSnapshot());
+    syncArenaHudFromState();
+    syncArenaDiagnostics();
+  }
+  if (spawnSelectionMode) renderSpawnPresets();
 }
 
 
 function selectPlace(place: PlaceResult): void {
   if (spawnSelectionMode) {
-    updateSpawnSelection(place.longitude, place.latitude);
+    const fullName = [place.name, place.admin1, place.country].filter(Boolean).join(", ");
+    updateSpawnSelection(place.longitude, place.latitude, fullName);
     map.flyTo({ center: [place.longitude, place.latitude], zoom: 15.5, pitch: 0, bearing: 0, duration: 1200, essential: true });
     return;
   }
@@ -1274,24 +1528,28 @@ function ensureGameLayers(): void {
       id: "juju-zone-rocks",
       type: "circle",
       source: "juju-zone-obstacles",
+      minzoom: 16,
       filter: ["==", ["get", "kind"], "rock"],
       paint: {
-        "circle-radius": 6,
+        "circle-radius": 3,
         "circle-color": "#89949a",
         "circle-stroke-color": "#35434a",
-        "circle-stroke-width": 2,
+        "circle-stroke-width": 1,
+        "circle-opacity": 0.45,
       },
     });
     map.addLayer({
       id: "juju-zone-trees",
       type: "circle",
       source: "juju-zone-obstacles",
+      minzoom: 16,
       filter: ["==", ["get", "kind"], "tree"],
       paint: {
-        "circle-radius": 9,
+        "circle-radius": 3.5,
         "circle-color": "#4f9b68",
         "circle-stroke-color": "#1e5639",
-        "circle-stroke-width": 3,
+        "circle-stroke-width": 1,
+        "circle-opacity": 0.45,
       },
     });
   }
@@ -1808,13 +2066,16 @@ function findSafeSpawn(lng: number, lat: number): [number, number, boolean] {
 }
 
 function startGameMode(resumeSession: SavedGameSession | null = null, requestedSpawn?: [number, number]): void {
-  if (!map.isStyleLoaded()) {
+  if (!mapStyleReady && !map.isStyleLoaded()) {
     showToast(language === "en" ? "The world map is still loading. Please wait a moment." : "La carte du monde est en cours de chargement. Patientez un instant.");
     return;
   }
   if (!activeSlot() && savedGameSlots.length >= SAVE_SLOT_LIMIT) {
     showToast(translations[language].saveLimit);
     return;
+  }
+  if (!resumeSession && !activeSlot()) {
+    syncExploredZonesFromProgress([]);
   }
   gameMode = true;
   clearPlayerDestination();
@@ -1875,6 +2136,27 @@ function startGameMode(resumeSession: SavedGameSession | null = null, requestedS
   }
   updateTravelledRoute();
   map.easeTo({ center: spawn, zoom: resumeSession?.zoom ?? Math.max(16, map.getZoom()), pitch: 0, bearing: 0, duration: 850 });
+  const checkToken = ++spawnCheckToken;
+  const verifySpawnAfterTilesLoaded = (): void => {
+    if (!gameMode || !playerMarker || checkToken !== spawnCheckToken) return;
+    if (map.getZoom() < 14 || !map.getLayer("juju-collision-buildings")) return;
+    const currentPos = playerMarker.getLngLat();
+    if (!isBuildingCollision(currentPos.lng, currentPos.lat)) return;
+    const safe = findSafeSpawn(currentPos.lng, currentPos.lat);
+    if (!safe[2]) return;
+    const safeLatLng = new maplibregl.LngLat(safe[0], safe[1]);
+    playerMarker.setLngLat(safeLatLng);
+    map.jumpTo({ center: safeLatLng });
+    if (travelledRouteCoordinates.length <= 1) {
+      travelledRouteCoordinates = [[safe[0], safe[1]]];
+      lastRoutePoint = [safe[0], safe[1]];
+      updateTravelledRoute();
+    }
+    updateGameHud();
+    saveGameSession(true);
+    showToast(translations[language].spawnAdjustedBuilding);
+  };
+  map.once("idle", verifySpawnAfterTilesLoaded);
   $("#app").classList.add("game-mode");
   $("#game-mode-toggle").textContent = translations[language].exitGame;
   $("#game-zone-status").textContent = translations[language].zoneLoading;
@@ -1952,19 +2234,17 @@ function stopMovementLoop(): void {
   playerMarker?.getElement().classList.add("is-idle");
 }
 
-function movementTick(time: number): void {
-  movementFrame = 0;
+function stepPlayerMovement(time: number, minDelta = 0.016): boolean {
   if (!gameMode || !playerMarker || (heldDirections.size === 0 && !navigationActive)) {
-    previousMovementTime = 0;
-    playerMarker?.getElement().classList.remove("is-moving");
-    playerMarker?.getElement().classList.add("is-idle");
-    return;
+    return false;
   }
-  const delta = previousMovementTime ? Math.min((time - previousMovementTime) / 1000, 0.05) : 0;
+  const rawDelta = previousMovementTime ? Math.max(0, (time - previousMovementTime) / 1000) : minDelta;
+  const delta = Math.max(minDelta, Math.min(rawDelta, 0.35));
   previousMovementTime = time;
+  if (delta <= 0) return true;
   let dx = 0;
   let dy = 0;
-  const center = map.getCenter();
+  const center = playerMarker.getLngLat();
   let stepDistance = movementSpeed * delta;
   if (navigationActive && navigationRouteCoordinates.length > 1) {
     while (navigationWaypointIndex < navigationRouteCoordinates.length) {
@@ -1995,12 +2275,18 @@ function movementTick(time: number): void {
     }
   }
   const length = Math.hypot(dx, dy);
-  if (length > 0 && delta > 0) {
+  if (length > 0) {
     const direction = normalizeDirection({ x: dx, y: dy });
-    if (!direction) return;
-    const destination = destinationFromDirection(center, direction, stepDistance);
-    let next = new maplibregl.LngLat(destination.lng, destination.lat);
-    if (isBuildingCollision(next.lng, next.lat)) {
+    if (!direction) return true;
+    const substeps = Math.max(1, Math.ceil(stepDistance / 1.5));
+    const subDistance = stepDistance / substeps;
+    let next = new maplibregl.LngLat(center.lng, center.lat);
+    for (let step = 0; step < substeps; step += 1) {
+      const candidate = destinationFromDirection(next, direction, subDistance);
+      if (!isBuildingCollision(candidate.lng, candidate.lat)) {
+        next = new maplibregl.LngLat(candidate.lng, candidate.lat);
+        continue;
+      }
       if (navigationActive) {
         navigationActive = false;
         updateNavigationControl();
@@ -2009,21 +2295,26 @@ function movementTick(time: number): void {
         heldDirections.clear();
         previousMovementTime = 0;
         saveGameSession(true);
-        return;
+        break;
       }
-      const horizontal = destinationFromDirection(center, { x: direction.x, y: 0 }, stepDistance);
-      const vertical = destinationFromDirection(center, { x: 0, y: direction.y }, stepDistance);
+      const horizontal = destinationFromDirection(next, { x: direction.x, y: 0 }, subDistance);
+      const vertical = destinationFromDirection(next, { x: 0, y: direction.y }, subDistance);
       const horizontalClear = Math.abs(direction.x) > 0.01 && !isBuildingCollision(horizontal.lng, horizontal.lat);
       const verticalClear = Math.abs(direction.y) > 0.01 && !isBuildingCollision(vertical.lng, vertical.lat);
-      if (horizontalClear) next = new maplibregl.LngLat(horizontal.lng, horizontal.lat);
-      else if (verticalClear) next = new maplibregl.LngLat(vertical.lng, vertical.lat);
-      else {
+      if (horizontalClear) {
+        next = new maplibregl.LngLat(horizontal.lng, horizontal.lat);
+      } else if (verticalClear) {
+        next = new maplibregl.LngLat(vertical.lng, vertical.lat);
+      } else {
         $("#game-player-status").textContent = translations[language].blocked;
         heldDirections.clear();
         playerMarker.getElement().classList.remove("is-moving");
         previousMovementTime = 0;
-        return;
+        break;
       }
+    }
+    if (next.lng === center.lng && next.lat === center.lat) {
+      return heldDirections.size > 0 || navigationActive;
     }
     const activeDirection = [...heldDirections].map((key) => directionKeys[key]).filter(Boolean).at(-1);
     const headingX = direction.x;
@@ -2053,12 +2344,23 @@ function movementTick(time: number): void {
     updateGameHud();
     saveGameSession();
   }
+  return heldDirections.size > 0 || navigationActive;
+}
+
+function movementTick(time: number): void {
+  movementFrame = 0;
+  if (!stepPlayerMovement(time, 0.016)) {
+    previousMovementTime = 0;
+    playerMarker?.getElement().classList.remove("is-moving");
+    playerMarker?.getElement().classList.add("is-idle");
+    return;
+  }
   movementFrame = window.requestAnimationFrame(movementTick);
 }
 
 function startMovementLoop(): void {
   if (!movementFrame && gameMode && (heldDirections.size || navigationActive)) {
-    previousMovementTime = 0;
+    if (!previousMovementTime) previousMovementTime = performance.now();
     movementFrame = window.requestAnimationFrame(movementTick);
   }
 }
@@ -2069,8 +2371,14 @@ function setMovementKey(key: string, pressed: boolean): void {
   if (pressed) {
     heldDirections.add(normalized);
     if (navigationActive) { navigationActive = false; updateNavigationControl(); }
-  } else heldDirections.delete(normalized);
-  if (pressed) startMovementLoop();
+    startMovementLoop();
+    return;
+  }
+  if (!navigationActive && heldDirections.has(normalized) && heldDirections.size === 1 && previousMovementTime > 0) {
+    const now = performance.now();
+    if (now - previousMovementTime >= 16) stepPlayerMovement(now, 0);
+  }
+  heldDirections.delete(normalized);
   if (!heldDirections.size && !navigationActive) {
     if (movementFrame) window.cancelAnimationFrame(movementFrame);
     movementFrame = 0;
@@ -2154,6 +2462,7 @@ map.on("sourcedata", (event) => {
 });
 
 map.on("load", () => {
+  mapStyleReady = true;
   ensureGameLayers();
   mapStatus.textContent = translations[language].ready;
   map.setProjection({ type: "mercator" });
@@ -2167,7 +2476,8 @@ map.on("load", () => {
 });
 
 map.on("style.load", () => {
-  mapStatus.textContent = translations[language].ready;
+  mapStyleReady = true;
+  if (map.isStyleLoaded()) mapStatus.textContent = translations[language].ready;
   ensureGameLayers();
   add3DBuildings();
   addPointsOfInterest();
@@ -2193,9 +2503,10 @@ $("#spawn-picker-cancel").addEventListener("click", () => {
 $("#spawn-picker-confirm").addEventListener("click", () => {
   if (!selectedSpawnCoordinates) return;
   const spawn = [...selectedSpawnCoordinates] as [number, number];
+  const placeLabel = selectedSpawnPlaceLabel;
   closeSpawnPicker();
-  startGameMode(null, spawn);
-  if (gameMode) document.querySelector<HTMLElement>("#home-screen")!.hidden = true;
+  document.querySelector<HTMLElement>("#home-screen")!.hidden = true;
+  void launchThreeArena(spawn[0], spawn[1], null, placeLabel);
 });
 $("#home-saves").addEventListener("click", openHomeSaves);
 $("#home-settings").addEventListener("click", openHomeSettings);
@@ -2295,7 +2606,7 @@ document.querySelectorAll<HTMLButtonElement>("[data-move]").forEach((button) => 
   if (!key) return;
   button.addEventListener("pointerdown", (event) => {
     event.preventDefault();
-    button.setPointerCapture(event.pointerId);
+    try { button.setPointerCapture(event.pointerId); } catch { /* Synthetic pointer events may lack an active pointer. */ }
     setMovementKey(key, true);
   });
   const release = () => setMovementKey(key, false);
@@ -2508,7 +2819,22 @@ async function searchPlaces(query: string): Promise<void> {
   activeSearchController?.abort();
   activeSearchController = null;
   searchResults.replaceChildren();
-  if (query.trim().length < 2) return;
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return;
+
+  const coordMatch = trimmed.match(/^(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)$/);
+  if (coordMatch) {
+    const lat = Number.parseFloat(coordMatch[1]);
+    const lng = Number.parseFloat(coordMatch[2]);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 85 && Math.abs(lng) <= 180) {
+      selectPlace({
+        name: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+        latitude: lat,
+        longitude: lng,
+      });
+      return;
+    }
+  }
 
   const loading = document.createElement("p");
   loading.className = "search-message";
@@ -2586,96 +2912,667 @@ map.on("error", (event) => {
 });
 
 
-// Three.js is currently an isolated prototype scene. It deliberately does not pretend
-// that its fictional buildings are extracted from the real OpenStreetMap geometry.
-let activeThreeGame: Game | null = null;
+// Unified 3D Tactical Earth Arena driven by real OpenStreetMap vector layers & DEM terrain.
 const game3dButton = document.querySelector<HTMLButtonElement>("#game-3d-toggle");
 const game3dOverlay = document.querySelector<HTMLElement>("#game-3d-overlay");
 const game3dContainer = document.querySelector<HTMLElement>("#game-3d-canvas");
 const game3dExit = document.querySelector<HTMLButtonElement>("#game-3d-exit");
+const game3dSprint = document.querySelector<HTMLButtonElement>("#game-3d-sprint");
+const game3dJump = document.querySelector<HTMLButtonElement>("#game-3d-jump");
+const game3dInteract = document.querySelector<HTMLButtonElement>("#game-3d-interact");
 
-let lastThreeDimensionalPosition: [number, number] | null = null;
+function resetThreeDimensionalSprint(): void {
+  game3dSprintActive = false;
+  if (game3dSprint) {
+    game3dSprint.classList.remove("is-active");
+    game3dSprint.setAttribute("aria-pressed", "false");
+  }
+}
 
-function leaveThreeDimensionalPrototype(): void {
-  activeThreeGame?.dispose();
-  activeThreeGame = null;
-  if (game3dOverlay) game3dOverlay.hidden = true;
-  if (gameMode) return;
-  const slot = activeSlot();
-  if (slot && lastThreeDimensionalPosition) {
-    const [lng, lat] = lastThreeDimensionalPosition;
+const activeVirtualMoveKeys = new Set<string>();
+document.querySelectorAll<HTMLButtonElement>("[data-3d-move]").forEach((button) => {
+  const key = button.getAttribute("data-3d-move") ?? "";
+  if (!key) return;
+  button.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    activeVirtualMoveKeys.add(key);
+    activeThreeGame?.setVirtualKey(key, true);
+  });
+  const release = (event: Event) => {
+    event.stopPropagation();
+    activeVirtualMoveKeys.delete(key);
+    activeThreeGame?.setVirtualKey(key, false);
+  };
+  button.addEventListener("pointerup", release);
+  button.addEventListener("pointercancel", release);
+});
+window.addEventListener("pointerup", () => {
+  if (activeVirtualMoveKeys.size === 0) return;
+  activeVirtualMoveKeys.forEach((key) => activeThreeGame?.setVirtualKey(key, false));
+  activeVirtualMoveKeys.clear();
+});
+window.addEventListener("blur", () => {
+  activeVirtualMoveKeys.forEach((key) => activeThreeGame?.setVirtualKey(key, false));
+  activeVirtualMoveKeys.clear();
+});
+
+game3dSprint?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  game3dSprintActive = !game3dSprintActive;
+  game3dSprint.classList.toggle("is-active", game3dSprintActive);
+  game3dSprint.setAttribute("aria-pressed", String(game3dSprintActive));
+  activeThreeGame?.setVirtualKey("shift", game3dSprintActive);
+});
+
+game3dJump?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  activeThreeGame?.triggerJump();
+});
+
+game3dInteract?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  activeThreeGame?.triggerInteract();
+});
+
+function ensureArenaSaveSlot(lng: number, lat: number, placeLabel?: string): SavedGameSlot | undefined {
+  let slot = activeSlot();
+  if (!slot && savedGameSlots.length < SAVE_SLOT_LIMIT) {
+    const now = Date.now();
     const zone = zoneFor(lng, lat);
-    slot.session = { ...slot.session, lng, lat, zoneX: zone.x, zoneY: zone.y, savedAt: Date.now() };
-    slot.updatedAt = Date.now();
+    slot = {
+      id: `save-${now}-${Math.random().toString(36).slice(2, 7)}`,
+      name: placeLabel?.trim().slice(0, 32) || `Exploration ${savedGameSlots.length + 1}`,
+      session: {
+        lng,
+        lat,
+        zoneX: zone.x,
+        zoneY: zone.y,
+        movementSpeed,
+        zoom: 16.5,
+        savedAt: now,
+        destination: null,
+        travelledRoute: [[lng, lat]],
+      },
+      progress: emptyProgress(),
+      createdAt: now,
+      updatedAt: now,
+    };
+    savedGameSlots.unshift(slot);
+    activeSaveSlotId = slot.id;
     persistSavedGameSlots();
     renderSavedGameSlots();
   }
-  lastThreeDimensionalPosition = null;
-  startGameMode(activeSlot()?.session ?? null);
+  return slot;
 }
 
-game3dButton?.addEventListener("click", () => {
-  if (!gameMode || !game3dOverlay || !game3dContainer) return;
-  const origin = map.getCenter();
-  const mappedBuildings = map.querySourceFeatures("openmaptiles", { sourceLayer: "building" })
-    .filter((feature) => feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon")
-    .slice(0, 350) as unknown as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
-  const uniqueBuildings = new Map<string, GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>>();
-  mappedBuildings.forEach((feature) => {
-    const key = String(feature.id ?? JSON.stringify(feature.geometry.coordinates));
-    if (!uniqueBuildings.has(key)) uniqueBuildings.set(key, feature);
-  });
-  const roadClasses = new Set(["motorway", "trunk", "primary", "secondary", "tertiary", "minor",
-    "residential", "unclassified", "service", "living_street", "pedestrian", "track", "path", "footway", "cycleway", "steps"]);
-  const mappedRoads = map.querySourceFeatures("openmaptiles", { sourceLayer: "transportation" })
-    .filter((feature) => (feature.geometry.type === "LineString" || feature.geometry.type === "MultiLineString")
-      && roadClasses.has(String(feature.properties?.class ?? "")))
-    .slice(0, 700) as unknown as GeoJSON.Feature<GeoJSON.LineString | GeoJSON.MultiLineString>[];
-  // Sample the active DEM only when the map's terrain layer is enabled. Otherwise
-  // the 3D prototype clearly remains at sea-level rather than inventing elevations.
+function extractOsmWorldInputs(originLng: number, originLat: number) {
+  const hasSource = !!map.getSource("openmaptiles");
+  const cosLat = Math.max(0.2, Math.cos((originLat * Math.PI) / 180));
+
+  const measureProximity = (
+    coords: unknown,
+    maxLatDeg: number,
+  ): { inRange: boolean; distSq: number } => {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    const visit = (node: unknown): void => {
+      if (!Array.isArray(node) || node.length === 0) return;
+      if (typeof node[0] === "number" && typeof node[1] === "number") {
+        const x = node[0];
+        const y = node[1];
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      } else {
+        for (let i = 0; i < node.length; i += 1) {
+          visit(node[i]);
+        }
+      }
+    };
+    visit(coords);
+    if (!Number.isFinite(minX)) return { inRange: false, distSq: Infinity };
+    const dxEdge = Math.max(minX - originLng, 0, originLng - maxX) * cosLat;
+    const dyEdge = Math.max(minY - originLat, 0, originLat - maxY);
+    if (dxEdge > maxLatDeg || dyEdge > maxLatDeg) {
+      return { inRange: false, distSq: Infinity };
+    }
+    const cx = (minX + maxX) * 0.5;
+    const cy = (minY + maxY) * 0.5;
+    const dxCenter = (cx - originLng) * cosLat;
+    const dyCenter = cy - originLat;
+    const edgeDistSq = dxEdge * dxEdge + dyEdge * dyEdge;
+    const centerDistSq = dxCenter * dxCenter + dyCenter * dyCenter;
+    return {
+      inRange: true,
+      distSq: edgeDistSq > 0 ? edgeDistSq * 4 + centerDistSq * 0.05 : centerDistSq,
+    };
+  };
+
+  const uniqueBuildings = new Map<
+    string,
+    { feature: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>; distSq: number }
+  >();
+  if (hasSource) {
+    for (const f of map.querySourceFeatures("openmaptiles", { sourceLayer: "building" })) {
+      if (f.geometry.type !== "Polygon" && f.geometry.type !== "MultiPolygon") continue;
+      const prox = measureProximity(f.geometry.coordinates, 0.0036);
+      if (!prox.inRange) continue;
+      const geom = f.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon;
+      const firstPt = geom.type === "Polygon" ? geom.coordinates[0]?.[0] : geom.coordinates[0]?.[0]?.[0];
+      const ptTag = firstPt ? `${firstPt[0].toFixed(6)},${firstPt[1].toFixed(6)}` : "";
+      const key = `${String(f.id ?? "b")}:${ptTag}`;
+      if (!uniqueBuildings.has(key)) {
+        uniqueBuildings.set(key, {
+          feature: f as unknown as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>,
+          distSq: prox.distSq,
+        });
+      }
+    }
+  }
+  const sortedBuildings = [...uniqueBuildings.values()]
+    .sort((a, b) => a.distSq - b.distSq)
+    .slice(0, 260)
+    .map((entry) => entry.feature);
+
+  const roadClasses = new Set([
+    "motorway", "trunk", "primary", "secondary", "tertiary", "minor",
+    "residential", "unclassified", "service", "living_street", "pedestrian",
+    "track", "path", "footway", "cycleway", "steps",
+  ]);
+  const mappedRoads = hasSource
+    ? (map.querySourceFeatures("openmaptiles", { sourceLayer: "transportation" })
+        .filter((f) => (f.geometry.type === "LineString" || f.geometry.type === "MultiLineString")
+          && roadClasses.has(String(f.properties?.class ?? "")))
+        .map((f) => ({
+          feature: f as unknown as GeoJSON.Feature<GeoJSON.LineString | GeoJSON.MultiLineString>,
+          prox: measureProximity((f.geometry as GeoJSON.LineString | GeoJSON.MultiLineString).coordinates, 0.0046),
+        }))
+        .filter((entry) => entry.prox.inRange)
+        .sort((a, b) => a.prox.distSq - b.prox.distSq)
+        .slice(0, 750)
+        .map((entry) => entry.feature))
+    : [];
+
+  const parkPolygons = hasSource
+    ? map.querySourceFeatures("openmaptiles", { sourceLayer: "park" })
+        .filter((f) => f.geometry.type === "Polygon" || f.geometry.type === "MultiPolygon")
+    : [];
+  const landcoverPolygons = hasSource
+    ? map.querySourceFeatures("openmaptiles", { sourceLayer: "landcover" })
+        .filter((f) => f.geometry.type === "Polygon" || f.geometry.type === "MultiPolygon")
+    : [];
+  const landusePolygons = hasSource
+    ? map.querySourceFeatures("openmaptiles", { sourceLayer: "landuse" })
+        .filter((f) => (f.geometry.type === "Polygon" || f.geometry.type === "MultiPolygon")
+          && ["park", "cemetery", "recreation_ground", "village_green", "garden"].includes(String(f.properties?.class ?? "")))
+    : [];
+  const mappedGreens = [...parkPolygons, ...landcoverPolygons, ...landusePolygons]
+    .map((f) => ({
+      feature: f as unknown as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>,
+      prox: measureProximity((f.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon).coordinates, 0.0055),
+    }))
+    .filter((entry) => entry.prox.inRange)
+    .sort((a, b) => a.prox.distSq - b.prox.distSq)
+    .slice(0, 320)
+    .map((entry) => entry.feature);
+
+  const waterPolys = hasSource
+    ? map.querySourceFeatures("openmaptiles", { sourceLayer: "water" })
+        .filter((f) => f.geometry.type === "Polygon" || f.geometry.type === "MultiPolygon")
+    : [];
+  const waterwayLines = hasSource
+    ? map.querySourceFeatures("openmaptiles", { sourceLayer: "waterway" })
+        .filter((f) => f.geometry.type === "LineString" || f.geometry.type === "MultiLineString")
+    : [];
+  const mappedWaters = [...waterPolys, ...waterwayLines]
+    .map((f) => ({
+      feature: f as unknown as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon | GeoJSON.LineString | GeoJSON.MultiLineString>,
+      prox: measureProximity((f.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon | GeoJSON.LineString | GeoJSON.MultiLineString).coordinates, 0.0055),
+    }))
+    .filter((entry) => entry.prox.inRange)
+    .sort((a, b) => a.prox.distSq - b.prox.distSq)
+    .slice(0, 220)
+    .map((entry) => entry.feature);
+
+  const mappedPois = hasSource
+    ? (map.querySourceFeatures("openmaptiles", { sourceLayer: "poi" })
+        .filter((f) => f.geometry.type === "Point")
+        .map((f) => ({
+          feature: f as unknown as GeoJSON.Feature<GeoJSON.Point>,
+          prox: measureProximity((f.geometry as GeoJSON.Point).coordinates, 0.0038),
+        }))
+        .filter((entry) => entry.prox.inRange)
+        .sort((a, b) => a.prox.distSq - b.prox.distSq)
+        .slice(0, 140)
+        .map((entry) => entry.feature))
+    : [];
+
   const terrainSegments = 16;
-  const terrainSize = 300;
+  const terrainSize = 360;
   const terrainSamples: { x: number; z: number; elevation: number }[] = [];
-  const metersPerLongitude = 111320 * Math.cos(origin.lat * Math.PI / 180);
+  const metersPerLongitude = 111320 * Math.cos(originLat * Math.PI / 180);
   if (terrainEnabled && metersPerLongitude > 1) {
     for (let row = 0; row <= terrainSegments; row += 1) {
-      for (let column = 0; column <= terrainSegments; column += 1) {
-        const x = -terrainSize / 2 + (column / terrainSegments) * terrainSize;
-        const z = -terrainSize / 2 + (row / terrainSegments) * terrainSize;
-        const lng = origin.lng + x / metersPerLongitude;
-        const lat = origin.lat - z / 111320;
+      for (let col = 0; col <= terrainSegments; col += 1) {
+        const x = -terrainSize / 2 + (columnToFrac(col, terrainSegments)) * terrainSize;
+        const z = -terrainSize / 2 + (columnToFrac(row, terrainSegments)) * terrainSize;
+        const lng = originLng + x / metersPerLongitude;
+        const lat = originLat - z / 111320;
         const elevation = map.queryTerrainElevation([lng, lat]);
         terrainSamples.push({ x, z, elevation: Number.isFinite(elevation) ? Number(elevation) : 0 });
       }
     }
   }
-  stopGameMode();
-  game3dOverlay.hidden = false;
+
+  return {
+    origin: [originLng, originLat] as [number, number],
+    buildings: sortedBuildings,
+    roads: mappedRoads,
+    greens: mappedGreens,
+    waters: mappedWaters,
+    pois: mappedPois,
+    terrain: terrainSamples,
+    terrainSize,
+    terrainSegments,
+  };
+}
+
+function columnToFrac(index: number, segments: number): number {
+  return segments > 0 ? index / segments : 0;
+}
+
+function syncArenaDataBadge(snapshot: OsmWorldSnapshot): void {
+  const badge = document.querySelector<HTMLElement>("#arena-data-badge");
+  if (!badge) return;
   const t = translations[language];
-  const title = game3dOverlay.querySelector<HTMLElement>('[data-i18n="game3dTitle"]');
-  const description = game3dOverlay.querySelector<HTMLElement>('[data-i18n="game3dDescription"]');
-  const exit = game3dOverlay.querySelector<HTMLElement>('[data-i18n="game3dExit"]');
-  const help = game3dOverlay.querySelector<HTMLElement>('[data-i18n="game3dHelp"]');
-  if (title) title.textContent = t.game3dTitle;
-  if (description) description.textContent = t.game3dDescription;
-  if (exit) exit.textContent = t.game3dExit;
-  if (help) help.textContent = t.game3dHelp;
+  badge.classList.remove("is-sparse", "is-partial", "is-error");
+  const status = snapshot.diagnostics?.status;
+  const unit = language === "fr" ? "BÂT" : "BLDG";
+
+  if (status === "error") {
+    badge.textContent = t.dataStatusError;
+    badge.classList.add("is-error");
+    badge.dataset.geoStatus = "error";
+    return;
+  }
+  if (status === "unavailable") {
+    badge.textContent = t.dataStatusUnavailable;
+    badge.classList.add("is-error");
+    badge.dataset.geoStatus = "unavailable";
+    return;
+  }
+  if (status === "sparse_real") {
+    badge.textContent = t.dataStatusSparse;
+    badge.classList.add("is-sparse");
+    badge.dataset.geoStatus = "sparse_real";
+    return;
+  }
+  if (status === "partial") {
+    badge.textContent = snapshot.counts.buildings > 0
+      ? `${t.dataStatusPartial} · ${snapshot.counts.buildings} ${unit}`
+      : t.dataStatusPartial;
+    badge.classList.add("is-partial");
+    badge.dataset.geoStatus = "partial";
+    return;
+  }
+  if (status === "complete") {
+    badge.textContent = `${t.dataStatusComplete} · ${snapshot.counts.buildings} ${unit}`;
+    badge.dataset.geoStatus = "complete";
+    return;
+  }
+
+  if (snapshot.dataRichness === "rich") {
+    badge.textContent = `${t.dataOsmRich} · ${snapshot.counts.buildings} ${unit}`;
+    badge.dataset.geoStatus = "complete";
+  } else if (snapshot.dataRichness === "moderate") {
+    badge.textContent = t.dataOsmModerate;
+    badge.classList.add("is-partial");
+    badge.dataset.geoStatus = "partial";
+  } else {
+    badge.textContent = t.dataStatusSparse;
+    badge.classList.add("is-sparse");
+    badge.dataset.geoStatus = "sparse_real";
+  }
+}
+
+function syncArenaHudFromState(matchState?: ArenaMatchState): void {
+  const t = translations[language];
+  const state = matchState ?? activeThreeGame?.getMatchState();
+  const modeChip = document.querySelector<HTMLElement>("#arena-mode-chip");
+  const objBar = document.querySelector<HTMLElement>("#arena-objective-bar");
+  const objDetail = document.querySelector<HTMLElement>("#arena-objective-detail");
+  const scoreEl = document.querySelector<HTMLElement>("#arena-score-readout");
+  const placeEl = document.querySelector<HTMLElement>("#arena-place-name");
+
+  if (placeEl) {
+    placeEl.textContent = arenaPlaceTitle || (language === "fr" ? "Secteur OpenStreetMap réel" : "OpenStreetMap Live Sector");
+  }
+
+  const mode = state?.mode ?? currentArenaMode;
+  if (modeChip) {
+    const modeLabel = mode === "zone_control"
+      ? t.modeZoneControl
+      : mode === "discovery_challenge"
+        ? t.modeDiscovery
+        : t.modeFreeRoam;
+    const simTag = state?.simulationBotsEnabled ? (language === "fr" ? " · IA LOCALE" : " · LOCAL AI") : "";
+    modeChip.textContent = `${modeLabel}${simTag}`;
+  }
+
+  document.querySelectorAll<HTMLButtonElement>("[data-arena-mode]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.arenaMode === mode);
+  });
+
+  if (objBar && state) {
+    if (mode === "free_roam" || state.objectives.length === 0) {
+      objBar.hidden = true;
+    } else {
+      objBar.hidden = false;
+      const ownedAlpha = state.objectives.filter((o) => o.owner === "alpha").length;
+      if (objDetail) objDetail.textContent = `${ownedAlpha} / ${state.objectives.length}`;
+      if (scoreEl) scoreEl.textContent = `${state.alphaScore} PTS`;
+    }
+  }
+
+  // Sync objective & remote participant overlays onto the radar mini-map
+  if (miniMap && miniMapReady && state) {
+    const objFeatures: GeoJSON.Feature<GeoJSON.Point>[] = state.objectives.map((o) => ({
+      type: "Feature",
+      properties: { owner: o.owner, title: o.title },
+      geometry: { type: "Point", coordinates: localMetersToGeo(arenaChunkOrigin, o.x, o.z) },
+    }));
+    (miniMap.getSource("juju-mini-objectives") as maplibregl.GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: objFeatures,
+    });
+    const actorFeatures: GeoJSON.Feature<GeoJSON.Point>[] = state.participants
+      .filter((p) => !p.isLocal)
+      .map((p) => ({
+        type: "Feature",
+        properties: { team: p.team, simulated: p.isSimulated },
+        geometry: { type: "Point", coordinates: localMetersToGeo(arenaChunkOrigin, p.x, p.z) },
+      }));
+    (miniMap.getSource("juju-mini-participants") as maplibregl.GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: actorFeatures,
+    });
+  }
+}
+
+function syncArenaDiagnostics(): void {
+  const diag = activeThreeGame?.getDiagnostics();
+  const readout = document.querySelector<HTMLElement>("#arena-diagnostics-readout");
+  const geoReadout = document.querySelector<HTMLElement>("#arena-geo-diagnostics");
+  if (!diag) {
+    if (readout) readout.textContent = "—";
+    if (geoReadout) geoReadout.textContent = "—";
+    return;
+  }
+  document.querySelectorAll<HTMLButtonElement>("[data-arena-quality]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.arenaQuality === diag.quality);
+  });
+  const fr = language === "fr";
+  if (readout) {
+    readout.textContent = fr
+      ? `${diag.fps} FPS (${diag.frameMs} ms) · ${diag.drawCalls} appels · ${diag.triangles} tri · ${diag.generated3dObjects} obj 3D · biome: ${diag.dominantBiome}`
+      : `${diag.fps} FPS (${diag.frameMs} ms) · ${diag.drawCalls} calls · ${diag.triangles} tri · ${diag.generated3dObjects} 3D obj · biome: ${diag.dominantBiome}`;
+  }
+  if (geoReadout) {
+    const geo = diag.geo ?? currentGeoDiagnostics;
+    if (!geo) {
+      geoReadout.textContent = fr ? "Aucune télémétrie géo disponible." : "No geo telemetry available.";
+      return;
+    }
+    const elevLine = geo.elevationStatus === "available" && geo.originElevationMeters !== null
+      ? (fr
+          ? `Relief DEM : ${geo.originElevationMeters} m (Δ ${geo.minElevationDelta >= 0 ? "+" : ""}${geo.minElevationDelta}..${geo.maxElevationDelta >= 0 ? "+" : ""}${geo.maxElevationDelta} m)`
+          : `DEM Relief: ${geo.originElevationMeters} m (Δ ${geo.minElevationDelta >= 0 ? "+" : ""}${geo.minElevationDelta}..${geo.maxElevationDelta >= 0 ? "+" : ""}${geo.maxElevationDelta} m)`)
+      : (fr ? `Relief DEM : ${geo.elevationStatus}` : `DEM Relief: ${geo.elevationStatus}`);
+    const missingText = geo.missingCategories.length > 0 ? geo.missingCategories.join(", ") : (fr ? "aucune" : "none");
+    const lines = [
+      fr
+        ? `Statut : ${geo.status.toUpperCase()} · Implantation : ${geo.settlementType}`
+        : `Status: ${geo.status.toUpperCase()} · Settlement: ${geo.settlementType}`,
+      fr
+        ? `Tuiles MVT : ${geo.tilesReceived}/${geo.tilesRequested} (err ${geo.tileErrors}, cache ${geo.cacheHits}) · ${geo.fetchMs} ms · ${geo.datasetVersion}`
+        : `MVT Tiles: ${geo.tilesReceived}/${geo.tilesRequested} (err ${geo.tileErrors}, cache ${geo.cacheHits}) · ${geo.fetchMs} ms · ${geo.datasetVersion}`,
+      fr
+        ? `Extraits : ${geo.counts.buildings} bât · ${geo.counts.roads} routes · ${geo.counts.greens} parcs/sols · ${geo.counts.waters} eaux · ${geo.counts.pois + geo.counts.heritage} POIs/patrimoine`
+        : `Extracted: ${geo.counts.buildings} bldg · ${geo.counts.roads} roads · ${geo.counts.greens} parks/cover · ${geo.counts.waters} water · ${geo.counts.pois + geo.counts.heritage} POIs/heritage`,
+      elevLine,
+      fr
+        ? `Sources : ${geo.sourcesUsed.join(" + ")} · Manquant : ${missingText}`
+        : `Sources: ${geo.sourcesUsed.join(" + ")} · Missing: ${missingText}`,
+    ];
+    if (geo.errors.length > 0) {
+      lines.push(`${fr ? "Erreurs" : "Errors"}: ${geo.errors.slice(0, 2).join(" | ")}`);
+    }
+    geoReadout.textContent = lines.join("\n");
+  }
+}
+
+function toggleArenaPauseModal(open?: boolean): void {
+  const modal = document.querySelector<HTMLElement>("#arena-pause-modal");
+  if (!modal) return;
+  const shouldOpen = open ?? modal.hidden;
+  modal.hidden = !shouldOpen;
+  const missionsModal = document.querySelector<HTMLElement>("#arena-missions-modal");
+  if (shouldOpen && missionsModal) missionsModal.hidden = true;
+  activeThreeGame?.setPaused(shouldOpen || (missionsModal ? !missionsModal.hidden : false));
+  if (shouldOpen) {
+    const roomInput = document.querySelector<HTMLInputElement>("#arena-room-code");
+    if (roomInput) roomInput.value = currentRoomCode;
+    const botsToggle = document.querySelector<HTMLInputElement>("#arena-sim-bots-toggle");
+    if (botsToggle) botsToggle.checked = currentSimBots;
+    syncArenaHudFromState();
+    syncArenaDiagnostics();
+  }
+}
+
+function renderArenaMissionsModal(): void {
+  const body = document.querySelector<HTMLElement>("#arena-missions-body");
+  if (!body) return;
+  body.replaceChildren();
+  const slot = activeSlot();
+  const progress = slot?.progress ?? emptyProgress();
+  const fr = language === "fr";
+
+  const statsBox = document.createElement("div");
+  statsBox.className = "home-profile-stats";
+  const rows: [string, string][] = [
+    [fr ? "NIVEAU" : "LEVEL", String(Math.floor(progress.xp / 100) + 1)],
+    ["XP TOTAL", `${progress.xp} XP`],
+    [fr ? "DISTANCE" : "DISTANCE", progress.distanceMeters >= 1000 ? `${(progress.distanceMeters / 1000).toFixed(2)} km` : `${Math.floor(progress.distanceMeters)} m`],
+    [fr ? "ZONES VISITÉES" : "ZONES VISITED", String(progress.zones.length)],
+  ];
+  rows.forEach(([label, value]) => {
+    const item = document.createElement("div");
+    const sm = document.createElement("small");
+    sm.textContent = label;
+    const st = document.createElement("strong");
+    st.textContent = value;
+    item.append(sm, st);
+    statsBox.append(item);
+  });
+  body.append(statsBox);
+
+  if (slot) {
+    const state = ensureDailyMissions(slot);
+    state.missions.forEach((mission) => {
+      const card = document.createElement("article");
+      card.className = "daily-mission-card";
+      const top = document.createElement("div");
+      top.className = "daily-mission-top";
+      const name = document.createElement("strong");
+      name.textContent = missionLabel(mission.id);
+      const reward = document.createElement("span");
+      reward.textContent = mission.completedAt ? (fr ? "TERMINÉE" : "COMPLETE") : `+${mission.rewardXp} XP`;
+      top.append(name, reward);
+      const track = document.createElement("div");
+      track.className = "mission-progress-track";
+      const fill = document.createElement("span");
+      fill.style.width = `${Math.min(100, (mission.progress / mission.target) * 100)}%`;
+      track.append(fill);
+      const detail = document.createElement("small");
+      detail.textContent = mission.id === "distance" ? `${Math.floor(mission.progress)} / ${mission.target} m` : `${mission.progress} / ${mission.target}`;
+      card.append(top, track, detail);
+      body.append(card);
+    });
+  }
+}
+
+function toggleArenaMissionsModal(open?: boolean): void {
+  const modal = document.querySelector<HTMLElement>("#arena-missions-modal");
+  if (!modal) return;
+  const shouldOpen = open ?? modal.hidden;
+  modal.hidden = !shouldOpen;
+  const pauseModal = document.querySelector<HTMLElement>("#arena-pause-modal");
+  if (shouldOpen && pauseModal) pauseModal.hidden = true;
+  if (shouldOpen) renderArenaMissionsModal();
+  activeThreeGame?.setPaused(shouldOpen || (pauseModal ? !pauseModal.hidden : false));
+}
+
+async function launchThreeArena(
+  lng: number,
+  lat: number,
+  resumeSession: SavedGameSession | null = null,
+  placeLabel?: string,
+): Promise<void> {
+  if (!game3dOverlay || !game3dContainer) return;
+
+  if (gameMode) stopGameMode();
+  $("#place-card").hidden = true;
+  selectedPlaceMarker?.remove();
+  selectedPlaceMarker = null;
+  document.querySelector<HTMLElement>("#home-screen")!.hidden = true;
+  const savesPanel = document.querySelector<HTMLElement>("#resume-session");
+  if (savesPanel) savesPanel.hidden = true;
+
+  arenaPlaceTitle = placeLabel?.trim() || inferRenderedPlaceLabel(lng, lat);
+  ensureArenaSaveSlot(lng, lat, arenaPlaceTitle);
+
+  if (resumeSession?.movementSpeed) {
+    movementSpeed = resumeSession.movementSpeed > 12 ? 5.6 : Math.max(2.5, Math.min(12, resumeSession.movementSpeed));
+  }
+
+  $("#app").classList.add("arena-3d-active");
+  game3dOverlay.hidden = false;
+  resetThreeDimensionalSprint();
+  const t = translations[language];
+  const readout = document.querySelector<HTMLElement>("#game-3d-position");
+  const dataBadge = document.querySelector<HTMLElement>("#arena-data-badge");
+  if (readout) readout.textContent = t.arenaLoadingTiles;
+  if (dataBadge) {
+    dataBadge.classList.remove("is-sparse", "is-partial", "is-error");
+    dataBadge.textContent = t.dataStatusLoading;
+    dataBadge.dataset.geoStatus = "loading";
+  }
+  if (game3dSprint) game3dSprint.textContent = t.game3dSprint;
+  if (game3dJump) game3dJump.textContent = t.game3dJump;
+  if (game3dInteract) game3dInteract.textContent = t.game3dInteract;
+
+  createMiniMap([lng, lat]);
+  syncMiniMapAt(lng, lat, "N", 15, true);
+
+  activeWorldAbort?.abort();
+  const worldCtrl = new AbortController();
+  activeWorldAbort = worldCtrl;
+
+  let worldInputs;
+  try {
+    const loadedArea = await geoDataEngine.loadArea(lng, lat, {
+      radiusMeters: 230,
+      terrainSize: 440,
+      terrainSegments: 18,
+      language,
+      regionName: arenaPlaceTitle,
+      signal: worldCtrl.signal,
+    });
+    // Fallback only if MVT HTTP failed completely AND MapLibre already holds cached tiles in memory
+    if (loadedArea.diagnostics.tilesReceived === 0 && map.getSource("openmaptiles")) {
+      const cachedInputs = extractOsmWorldInputs(lng, lat);
+      if (cachedInputs.buildings.length > 0 || cachedInputs.roads.length > 0) {
+        worldInputs = {
+          ...loadedArea,
+          buildings: cachedInputs.buildings,
+          roads: cachedInputs.roads,
+          greens: cachedInputs.greens,
+          waters: cachedInputs.waters,
+          pois: cachedInputs.pois,
+          diagnostics: {
+            ...loadedArea.diagnostics,
+            status: "partial" as const,
+            sourcesUsed: [...loadedArea.diagnostics.sourcesUsed, "MapLibre Tile Cache Fallback"],
+          },
+        };
+      } else {
+        worldInputs = loadedArea;
+      }
+    } else {
+      worldInputs = loadedArea;
+    }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") return;
+    throw err;
+  }
+
+  if (game3dOverlay.hidden || worldCtrl.signal.aborted) return;
+
+  currentGeoDiagnostics = worldInputs.diagnostics;
+  if (!placeLabel && worldInputs.diagnostics.regionName) {
+    arenaPlaceTitle = worldInputs.diagnostics.regionName;
+  }
+  arenaChunkOrigin = [...worldInputs.origin] as [number, number];
+
   try {
     activeThreeGame?.dispose();
-    lastThreeDimensionalPosition = [origin.lng, origin.lat];
-    activeThreeGame = new Game(game3dContainer, (x, z, lng, lat) => {
-      lastThreeDimensionalPosition = [lng, lat];
-      const readout = document.querySelector<HTMLElement>("#game-3d-position");
-      if (readout) readout.textContent = `3D · ${x.toFixed(1)} / ${z.toFixed(1)} m · ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    lastThreeDimensionalPosition = [lng, lat];
+    lastThreeDimensionalGeoPos = new maplibregl.LngLat(lng, lat);
+
+    activeThreeGame = new Game(game3dContainer, (x, z, curLng, curLat) => {
+      lastThreeDimensionalPosition = [curLng, curLat];
+      const nextGeo = new maplibregl.LngLat(curLng, curLat);
+      if (lastThreeDimensionalGeoPos && haversineDistance(lastThreeDimensionalGeoPos, nextGeo) >= 0.5) {
+        addTravelDistance(lastThreeDimensionalGeoPos, nextGeo);
+        const zone = zoneFor(curLng, curLat);
+        discoverProgressZone(zone.x, zone.y);
+        const slot = activeSlot();
+        if (slot) {
+          slot.session.lng = curLng;
+          slot.session.lat = curLat;
+          slot.session.zoneX = zone.x;
+          slot.session.zoneY = zone.y;
+          slot.session.savedAt = Date.now();
+          const route = slot.session.travelledRoute ?? [];
+          const prevRoutePt = route[route.length - 1];
+          if (!prevRoutePt || haversineDistance({ lng: prevRoutePt[0], lat: prevRoutePt[1] }, nextGeo) >= 5) {
+            route.push([curLng, curLat]);
+            if (route.length > 1800) route.splice(1, 1);
+            slot.session.travelledRoute = route;
+          }
+        }
+        lastThreeDimensionalGeoPos = nextGeo;
+      }
+
+      const state = activeThreeGame?.getState();
+      const heading = state ? yawToCardinal(state.headingYaw) : "N";
+      playerHeading = heading;
+      syncMiniMapAt(curLng, curLat, heading, 15);
+
+      if (readout && state) {
+        const speedLabel = `${state.speed.toFixed(1)} m/s`;
+        const floorInfo = state.inside ? ` · ${translations[language].floorLabel} ${state.floor + 1}` : "";
+        readout.textContent = `${x.toFixed(1)} / ${z.toFixed(1)} m · ${speedLabel}${floorInfo} · ${curLat.toFixed(5)}, ${curLng.toFixed(5)}`;
+      }
     }, {
-      origin: [origin.lng, origin.lat],
-      buildings: [...uniqueBuildings.values()],
-      roads: mappedRoads,
-      terrain: terrainSamples,
-      terrainSize,
-      terrainSegments,
+      ...worldInputs,
       saveSlotId: activeSlot()?.id ?? "local",
       initialInterior: activeSlot()?.interior,
+      language,
       onInteriorSave: (state) => {
         const slot = activeSlot();
         if (!slot) return;
@@ -2683,23 +3580,220 @@ game3dButton?.addEventListener("click", () => {
         slot.updatedAt = Date.now();
         persistSavedGameSlots();
       },
+      onWorldLoaded: (snapshot) => {
+        arenaChunkOrigin = [...snapshot.origin] as [number, number];
+        currentGeoDiagnostics = snapshot.diagnostics ?? currentGeoDiagnostics;
+        syncArenaDataBadge(snapshot);
+      },
+      onMatchState: (matchState) => {
+        syncArenaHudFromState(matchState);
+      },
+      onLandmarkInspect: (landmark) => {
+        discoverProgressCity(landmark.name || landmark.poiClass);
+        const srcTag = landmark.source === "wikipedia"
+          ? "Wikipedia"
+          : landmark.source === "osm-peak"
+            ? (landmark.elevationMeters ? `OSM (${landmark.elevationMeters} m)` : "OSM")
+            : "OpenStreetMap";
+        showToast(language === "fr"
+          ? `Lieu réel : ${landmark.name || landmark.poiClass} (${srcTag})`
+          : `Mapped landmark: ${landmark.name || landmark.poiClass} (${srcTag})`);
+      },
+      onEnterBuilding: (info) => {
+        showToast(language === "fr"
+          ? `Entrée : ${info.name} · Intérieur procédural (emprise OSM)`
+          : `Entered: ${info.name} · Procedural interior (OSM footprint)`);
+      },
+      onNeedChunkRefresh: (nextLng, nextLat, dirX, dirZ) => {
+        if (chunkRefreshInFlight || !activeThreeGame) return;
+        chunkRefreshInFlight = true;
+        geoDataEngine.prefetchAhead(nextLng, nextLat, dirX, dirZ);
+        void (async () => {
+          try {
+            const nextArea = await geoDataEngine.loadArea(nextLng, nextLat, {
+              radiusMeters: 230,
+              terrainSize: 440,
+              terrainSegments: 18,
+              language,
+              regionName: arenaPlaceTitle,
+              signal: activeWorldAbort?.signal,
+            });
+            if (!activeThreeGame || activeWorldAbort?.signal.aborted) return;
+            currentGeoDiagnostics = nextArea.diagnostics;
+            activeThreeGame.updateWorldChunk({
+              ...nextArea,
+              saveSlotId: activeSlot()?.id ?? "local",
+              language,
+            });
+            syncArenaDiagnostics();
+          } catch (err) {
+            if (!(err instanceof DOMException && err.name === "AbortError")) {
+              console.warn("Could not stream next world chunk:", err);
+            }
+          } finally {
+            chunkRefreshInFlight = false;
+          }
+        })();
+      },
     });
+
+    if (userSelectedQuality) activeThreeGame.setGraphicsQuality(userSelectedQuality);
+    activeThreeGame.setGameMode(currentArenaMode, currentSimBots);
+    activeThreeGame.setRoomCode(currentRoomCode);
     activeThreeGame.start();
-    const count = uniqueBuildings.size;
-    const roadCount = mappedRoads.length;
-    const terrainReady = terrainSamples.length > 0;
-    showToast(language === "fr"
-      ? `${count} bâtiments · ${roadCount} routes cartographiques · relief ${terrainReady ? "DEM actif" : "plat (activez le relief sur la carte avant le mode 3D)"}.`
-      : `${count} buildings · ${roadCount} mapped road features · terrain ${terrainReady ? "DEM active" : "flat (enable map terrain before entering 3D)"}.`);
+    syncArenaDataBadge(activeThreeGame.getOsmSnapshot());
+    syncArenaHudFromState();
+    syncArenaDiagnostics();
+
+    const spawnZone = zoneFor(lng, lat);
+    discoverProgressZone(spawnZone.x, spawnZone.y);
+    renderPlayerProgress();
+    renderDailyMissions();
+    renderSavedGameSlots();
   } catch (error) {
-    console.error("Could not start the Three.js world:", error);
+    console.error("Could not start the Three.js Tactical Arena:", error);
+    resetThreeDimensionalSprint();
     game3dOverlay.hidden = true;
+    $("#app").classList.remove("arena-3d-active");
     showToast(language === "fr" ? "Le monde 3D n'a pas pu démarrer sur cet appareil." : "The 3D world could not start on this device.");
     startGameMode(activeSlot()?.session ?? null);
   }
+}
+
+function saveThreeArenaSlotPosition(): void {
+  const slot = activeSlot();
+  if (!slot || !lastThreeDimensionalPosition) return;
+  const [lng, lat] = lastThreeDimensionalPosition;
+  const zone = zoneFor(lng, lat);
+  slot.session = { ...slot.session, lng, lat, zoneX: zone.x, zoneY: zone.y, savedAt: Date.now() };
+  slot.updatedAt = Date.now();
+  persistSavedGameSlots();
+  renderSavedGameSlots();
+}
+
+function disposeThreeArena(): void {
+  activeWorldAbort?.abort();
+  activeWorldAbort = null;
+  saveThreeArenaSlotPosition();
+  activeThreeGame?.dispose();
+  activeThreeGame = null;
+  resetThreeDimensionalSprint();
+  const pauseModal = document.querySelector<HTMLElement>("#arena-pause-modal");
+  const missionsModal = document.querySelector<HTMLElement>("#arena-missions-modal");
+  if (pauseModal) pauseModal.hidden = true;
+  if (missionsModal) missionsModal.hidden = true;
+  if (game3dOverlay) game3dOverlay.hidden = true;
+  $("#app").classList.remove("arena-3d-active");
+}
+
+function leaveThreeArenaTo2D(): void {
+  disposeThreeArena();
+  lastThreeDimensionalPosition = null;
+  lastThreeDimensionalGeoPos = null;
+  startGameMode(activeSlot()?.session ?? null);
+}
+
+function leaveThreeArenaToMainMenu(): void {
+  disposeThreeArena();
+  lastThreeDimensionalPosition = null;
+  lastThreeDimensionalGeoPos = null;
+  const home = document.querySelector<HTMLElement>("#home-screen");
+  const saves = document.querySelector<HTMLElement>("#resume-session");
+  if (saves) saves.hidden = true;
+  if (home) home.hidden = false;
+}
+
+game3dButton?.addEventListener("click", () => {
+  const origin = playerMarker?.getLngLat() ?? map.getCenter();
+  void launchThreeArena(origin.lng, origin.lat, activeSlot()?.session ?? null, arenaPlaceTitle);
 });
-game3dExit?.addEventListener("click", leaveThreeDimensionalPrototype);
+game3dExit?.addEventListener("click", leaveThreeArenaTo2D);
+
+document.querySelector<HTMLButtonElement>("#arena-zoom-in")?.addEventListener("click", () => {
+  activeThreeGame?.adjustCameraZoom(-4);
+});
+document.querySelector<HTMLButtonElement>("#arena-zoom-out")?.addEventListener("click", () => {
+  activeThreeGame?.adjustCameraZoom(4);
+});
+document.querySelector<HTMLButtonElement>("#arena-cam-north")?.addEventListener("click", () => {
+  activeThreeGame?.resetCameraNorth();
+});
+document.querySelector<HTMLButtonElement>("#arena-pause-btn")?.addEventListener("click", () => {
+  toggleArenaPauseModal(true);
+});
+document.querySelector<HTMLButtonElement>("#arena-pause-close")?.addEventListener("click", () => {
+  toggleArenaPauseModal(false);
+});
+document.querySelector<HTMLButtonElement>("#arena-resume-btn")?.addEventListener("click", () => {
+  toggleArenaPauseModal(false);
+});
+document.querySelector<HTMLButtonElement>("#arena-save-btn")?.addEventListener("click", () => {
+  saveThreeArenaSlotPosition();
+  showToast(language === "fr" ? "Position enregistrée localement." : "Position saved locally.");
+});
+document.querySelector<HTMLButtonElement>("#arena-lang-btn")?.addEventListener("click", () => {
+  setLanguage(language === "en" ? "fr" : "en");
+});
+document.querySelector<HTMLButtonElement>("#arena-world-map-btn")?.addEventListener("click", leaveThreeArenaTo2D);
+document.querySelector<HTMLButtonElement>("#arena-main-menu-btn")?.addEventListener("click", leaveThreeArenaToMainMenu);
+
+document.querySelectorAll<HTMLButtonElement>("[data-arena-mode]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const mode = btn.dataset.arenaMode as ArenaGameMode | undefined;
+    if (!mode) return;
+    currentArenaMode = mode;
+    activeThreeGame?.setGameMode(mode, currentSimBots);
+    syncArenaHudFromState();
+  });
+});
+
+document.querySelector<HTMLButtonElement>("#arena-room-join")?.addEventListener("click", () => {
+  const input = document.querySelector<HTMLInputElement>("#arena-room-code");
+  const code = input?.value.trim().toUpperCase();
+  if (!code) return;
+  currentRoomCode = code;
+  activeThreeGame?.setRoomCode(code);
+  showToast(language === "fr" ? `Salon local rejoint : ${code}` : `Joined local room: ${code}`);
+});
+
+document.querySelectorAll<HTMLButtonElement>("[data-arena-quality]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const tier = btn.dataset.arenaQuality as GraphicsQualityTier | undefined;
+    if (!tier) return;
+    userSelectedQuality = tier;
+    activeThreeGame?.setGraphicsQuality(tier);
+    syncArenaDiagnostics();
+  });
+});
+
+document.querySelector<HTMLInputElement>("#arena-sim-bots-toggle")?.addEventListener("change", (event) => {
+  const checked = (event.target as HTMLInputElement).checked;
+  currentSimBots = checked;
+  activeThreeGame?.setSimulationBots(checked);
+  syncArenaHudFromState();
+});
+
+document.querySelector<HTMLButtonElement>("#arena-missions-btn")?.addEventListener("click", () => {
+  toggleArenaMissionsModal(true);
+});
+document.querySelector<HTMLButtonElement>("#arena-missions-close")?.addEventListener("click", () => {
+  toggleArenaMissionsModal(false);
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (game3dOverlay && !game3dOverlay.hidden) {
+    const missionsModal = document.querySelector<HTMLElement>("#arena-missions-modal");
+    if (missionsModal && !missionsModal.hidden) {
+      toggleArenaMissionsModal(false);
+      return;
+    }
+    toggleArenaPauseModal();
+  }
+});
+
 window.addEventListener("pagehide", () => {
+  saveThreeArenaSlotPosition();
   activeThreeGame?.dispose();
   activeThreeGame = null;
 });

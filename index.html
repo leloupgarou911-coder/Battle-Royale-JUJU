@@ -150,10 +150,18 @@
 
       <section id="spawn-picker" class="spawn-picker-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="spawn-picker-title">
         <div class="spawn-picker-panel">
-          <div class="spawn-picker-kicker">JUJU WORLD · NEW EXPLORATION</div>
+          <div class="spawn-picker-kicker">JUJU WORLD · EARTH ARENA</div>
           <h2 id="spawn-picker-title">Choose your starting point</h2>
-          <p id="spawn-picker-help">Search for a city, or click anywhere on the map to place your starting marker.</p>
-          <div class="spawn-picker-location"><span>START LOCATION</span><strong id="spawn-picker-coordinates">Click the map to choose</strong></div>
+          <p id="spawn-picker-help">Search for a city, pick an instant biome drop, or click anywhere on the map to deploy.</p>
+          <div class="spawn-presets-wrap">
+            <span class="spawn-presets-label" data-i18n="spawnPresetsLabel">INSTANT BIOME DROPS</span>
+            <div id="spawn-presets" class="spawn-presets"></div>
+          </div>
+          <div class="spawn-picker-location">
+            <span>START LOCATION</span>
+            <strong id="spawn-picker-place" class="spawn-picker-place"></strong>
+            <strong id="spawn-picker-coordinates">Click the map to choose</strong>
+          </div>
           <div class="spawn-picker-actions">
             <button id="spawn-picker-cancel" type="button">CANCEL</button>
             <button id="spawn-picker-confirm" type="button" disabled>START HERE</button>
@@ -202,18 +210,19 @@
           <div><button type="button" data-move="left" data-i18n-aria="moveLeftAria" aria-label="Move left">◀</button><button type="button" data-move="down" data-i18n-aria="moveDownAria" aria-label="Move down">▼</button><button type="button" data-move="right" data-i18n-aria="moveRightAria" aria-label="Move right">▶</button></div>
         </div>
         <div class="game-hud-actions"><button id="game-main-menu" type="button" data-i18n="mainMenuLabel">MAIN MENU</button><button id="game-zone-reload" type="button" data-i18n="loadZone">RELOAD CURRENT ZONE</button><button id="game-mode-toggle" type="button" data-i18n="enterGame">ENTER GAME MODE</button>
-          <button id="game-3d-toggle" type="button">ENTER 3D PROTOTYPE</button></div>
+          <button id="game-3d-toggle" type="button" data-i18n="arenaTitle">JUJU WORLD · EARTH ARENA</button></div>
         <button id="game-clear-explored" class="game-clear-explored" type="button" data-i18n="clearExplored">CLEAR VISITED ZONES</button>
       </section>
 
-        <section class="game-mini-map-panel" data-i18n-aria="miniMapAriaLabel" aria-label="Navigation mini-map">
-          <div class="mini-map-heading"><strong data-i18n="miniMapTitle">MINI-MAP</strong><span data-i18n="miniMapPlayer">YOU</span></div>
-          <div class="mini-map-frame">
-            <div id="game-mini-map" aria-hidden="true"></div>
-            <div class="mini-map-player-marker" aria-hidden="true"><span></span></div>
-          </div>
-          <div id="mini-map-coordinates" class="mini-map-coordinates">0.000, 0.000</div>
-        </section>
+      <section class="game-mini-map-panel" data-i18n-aria="miniMapAriaLabel" aria-label="Navigation mini-map">
+        <div class="mini-map-heading"><strong data-i18n="miniMapTitle">MINI-MAP</strong><span data-i18n="miniMapPlayer">YOU</span></div>
+        <div class="mini-map-frame">
+          <div id="game-mini-map" aria-hidden="true"></div>
+          <div class="mini-map-player-marker" aria-hidden="true"><span></span></div>
+        </div>
+        <div id="mini-map-coordinates" class="mini-map-coordinates">0.00000, 0.00000</div>
+      </section>
+
       <section id="game-navigation" class="game-navigation" aria-label="Player navigation">
         <div class="game-navigation-top">
           <span class="navigation-live-dot"></span>
@@ -239,13 +248,110 @@
           <button id="game-map-zoom-in" type="button" aria-label="Zoom in">+</button>
         </div>
       </section>
-      <section id="game-3d-overlay" class="game-3d-overlay" hidden aria-label="JUJU WORLD 3D prototype">
-        <header class="game-3d-toolbar">
-          <div><strong data-i18n="game3dTitle">JUJU WORLD · 3D PROTOTYPE</strong><span data-i18n="game3dDescription">Fictional test environment — not yet connected to real map geometry</span></div>
-          <button id="game-3d-exit" type="button" data-i18n="game3dExit">BACK TO MAP</button>
-        </header>
-        <div id="game-3d-canvas" class="game-3d-canvas"></div><p id="game-3d-position" class="game-3d-position" aria-live="polite">LOCAL 3D POSITION · 0.0 / 0.0 m</p>
-        <div class="game-3d-help" data-i18n="game3dHelp">WASD / ZQSD to move · Mouse to look · Click the scene to capture the pointer</div>
+
+      <section id="game-3d-overlay" class="game-3d-overlay" hidden aria-label="JUJU WORLD 3D Earth Arena">
+        <div id="game-3d-canvas" class="game-3d-canvas">
+          <header id="arena-hud-top-left" class="arena-hud-top-left">
+            <div class="arena-hud-brand-row">
+              <strong data-i18n="arenaTitle">JUJU WORLD · EARTH ARENA</strong>
+              <span id="arena-data-badge" class="arena-data-badge" data-i18n="dataOsmRich">OSM REAL DATA</span>
+            </div>
+            <div class="arena-hud-place-row">
+              <span id="arena-place-name">OpenStreetMap Live Sector</span>
+              <span id="arena-mode-chip">FREE EXPLORATION</span>
+            </div>
+            <div id="arena-objective-bar" class="arena-objective-bar" hidden>
+              <strong id="arena-objective-title" data-i18n="arenaObjectivesLabel">TACTICAL OBJECTIVES</strong>
+              <span id="arena-objective-detail">0 / 0</span>
+              <b id="arena-score-readout">0 PTS</b>
+            </div>
+            <p id="game-3d-position" class="game-3d-position" aria-live="polite">0.0 / 0.0 m · 0.0 m/s</p>
+          </header>
+
+          <div class="arena-top-actions">
+            <button id="arena-zoom-out" type="button" data-i18n-aria="arenaZoomOutAria" aria-label="Zoom camera out">−</button>
+            <button id="arena-zoom-in" type="button" data-i18n-aria="arenaZoomInAria" aria-label="Zoom camera in">+</button>
+            <button id="arena-cam-north" type="button" data-i18n="arenaCamNorth">NORTH</button>
+            <button id="arena-missions-btn" type="button" data-i18n="arenaMissionsBtn">MISSIONS & STATS</button>
+            <button id="game-3d-exit" type="button" data-i18n="arenaWorldMapBtn">WORLD MAP 2D</button>
+            <button id="arena-pause-btn" class="arena-pause-btn" type="button" data-i18n="arenaPause">PAUSE</button>
+          </div>
+
+          <div id="game-3d-controls" class="game-3d-controls" data-i18n-aria="gameTouchAriaLabel" aria-label="Touch movement controls">
+            <div class="game-3d-dpad">
+              <button type="button" data-3d-move="w" data-i18n-aria="moveUpAria" aria-label="Move up">▲</button>
+              <div>
+                <button type="button" data-3d-move="a" data-i18n-aria="moveLeftAria" aria-label="Move left">◀</button>
+                <button type="button" data-3d-move="s" data-i18n-aria="moveDownAria" aria-label="Move down">▼</button>
+                <button type="button" data-3d-move="d" data-i18n-aria="moveRightAria" aria-label="Move right">▶</button>
+              </div>
+            </div>
+            <div class="game-3d-actions">
+              <button id="game-3d-sprint" type="button" data-i18n="game3dSprint">SPRINT</button>
+              <button id="game-3d-jump" type="button" data-i18n="game3dJump">JUMP</button>
+              <button id="game-3d-interact" type="button" data-i18n="game3dInteract">INTERACT</button>
+            </div>
+          </div>
+
+          <section id="arena-pause-modal" class="arena-modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="arena-pause-title">
+            <div class="arena-modal-card">
+              <div class="arena-modal-header">
+                <h2 id="arena-pause-title" data-i18n="arenaPauseTitle">TACTICAL MENU</h2>
+                <button id="arena-pause-close" type="button" data-i18n-aria="closeDialogAria" aria-label="Close">×</button>
+              </div>
+              <div class="arena-modal-section">
+                <span class="arena-field-label" data-i18n="arenaModeLabel">GAME MODE</span>
+                <div class="arena-mode-grid">
+                  <button type="button" class="arena-mode-option active" data-arena-mode="free_roam" data-i18n="modeFreeRoam">FREE EXPLORATION</button>
+                  <button type="button" class="arena-mode-option" data-arena-mode="zone_control" data-i18n="modeZoneControl">ZONE CONTROL (ARENA)</button>
+                  <button type="button" class="arena-mode-option" data-arena-mode="discovery_challenge" data-i18n="modeDiscovery">DISCOVERY CHALLENGE</button>
+                </div>
+              </div>
+              <div class="arena-modal-section">
+                <span class="arena-field-label" data-i18n="arenaRoomLabel">MULTIPLAYER ROOM (LOCAL BROWSER SYNC)</span>
+                <div class="arena-room-row">
+                  <input id="arena-room-code" type="text" maxlength="12" placeholder="JUJU-4A9K" />
+                  <button id="arena-room-join" type="button" data-i18n="arenaRoomJoin">JOIN ROOM</button>
+                </div>
+                <label class="arena-checkbox-row">
+                  <input id="arena-sim-bots-toggle" type="checkbox" />
+                  <span data-i18n="arenaSimBotsLabel">LOCAL AI SIMULATION BOTS</span>
+                </label>
+                <small class="arena-note" data-i18n="arenaSimNote">Simulation bots run locally in your browser; open another tab with the same room code for real cross-tab multiplayer.</small>
+              </div>
+              <div class="arena-modal-section">
+                <span class="arena-field-label" data-i18n="arenaQualityLabel">GRAPHICS QUALITY</span>
+                <div class="arena-quality-grid">
+                  <button type="button" class="arena-quality-option" data-arena-quality="performance" data-i18n="qualityPerformance">PERFORMANCE</button>
+                  <button type="button" class="arena-quality-option active" data-arena-quality="balanced" data-i18n="qualityBalanced">BALANCED</button>
+                  <button type="button" class="arena-quality-option" data-arena-quality="quality" data-i18n="qualityQuality">HIGH QUALITY</button>
+                </div>
+                <span class="arena-field-label" data-i18n="arenaDiagnosticsLabel">ENGINE DIAGNOSTICS</span>
+                <div id="arena-diagnostics-readout" class="arena-diagnostics-box">—</div>
+                <span class="arena-field-label" data-i18n="arenaGeoDiagnosticsLabel">GEOGRAPHIC DATA DIAGNOSTICS</span>
+                <div id="arena-geo-diagnostics" class="arena-diagnostics-box arena-geo-diagnostics-box">—</div>
+              </div>
+              <div class="arena-modal-actions">
+                <button id="arena-resume-btn" class="arena-primary-btn" type="button" data-i18n="arenaResume">RESUME ARENA</button>
+                <button id="arena-save-btn" type="button" data-i18n="arenaSaveBtn">SAVE POSITION</button>
+                <button id="arena-lang-btn" type="button">FR / EN</button>
+                <button id="arena-world-map-btn" type="button" data-i18n="arenaWorldMapBtn">WORLD MAP 2D</button>
+                <button id="arena-main-menu-btn" type="button" data-i18n="arenaMainMenuBtn">MAIN MENU</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="arena-missions-modal" class="arena-modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="arena-missions-title">
+            <div class="arena-modal-card">
+              <div class="arena-modal-header">
+                <h2 id="arena-missions-title" data-i18n="arenaMissionsBtn">MISSIONS & STATS</h2>
+                <button id="arena-missions-close" type="button" data-i18n-aria="closeDialogAria" aria-label="Close">×</button>
+              </div>
+              <div id="arena-missions-body" class="arena-missions-body"></div>
+            </div>
+          </section>
+        </div>
+        <div class="game-3d-help" data-i18n="game3dHelp">WASD / ZQSD to move · SHIFT to sprint · SPACE to jump · E to interact · Drag or click to look · Scroll to zoom</div>
       </section>
       <div class="map-hint"><span class="hint-icon">⌖</span><span data-i18n="hint">Drag to move · Scroll to zoom · Right-click to tilt</span></div>
       <div id="toast" class="toast" role="status"></div>
