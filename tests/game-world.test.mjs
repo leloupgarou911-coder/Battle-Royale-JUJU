@@ -689,4 +689,38 @@ test("osmWorld enriches OpenFreeMap buildings from landuse/POIs, handles bridge/
   assert.ok(world.streetFurniture.every((f) => f.source === "procedural-street-furniture"));
 });
 
-
+test("geoDataEngine classifies the nearest mapped settlement instead of a distant city label", async () => {
+  const { classifyAreaDiagnostics } = await import("../src/game/geoDataEngine.ts");
+  const base = {
+    origin: [7.3059, 48.0427],
+    regionName: "Eguisheim",
+    tilesRequested: 4,
+    tilesReceived: 4,
+    tileErrors: 0,
+    cacheHits: 0,
+    fetchMs: 30,
+    datasetVersion: "test",
+    sourcesUsed: ["OpenFreeMap"],
+    elevationStatus: "available",
+    originElevationMeters: 220,
+    minElevationDelta: -2,
+    maxElevationDelta: 3,
+    buildingsCount: 6,
+    roadsCount: 8,
+    greensCount: 1,
+    watersCount: 0,
+    poisCount: 2,
+    landusesCount: 1,
+    places: [
+      { type: "Feature", properties: { class: "village", name: "Eguisheim" }, geometry: { type: "Point", coordinates: [7.3059, 48.0427] } },
+      { type: "Feature", properties: { class: "city", name: "Colmar" }, geometry: { type: "Point", coordinates: [7.3585, 48.0794] } },
+    ],
+    peaks: [],
+    heritageCount: 0,
+    landcovers: [],
+    errors: [],
+  };
+  const result = classifyAreaDiagnostics(base);
+  assert.equal(result.settlementType, "village");
+  assert.equal(result.status, "complete");
+});
