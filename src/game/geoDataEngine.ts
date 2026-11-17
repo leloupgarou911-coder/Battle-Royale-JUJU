@@ -893,19 +893,28 @@ export class MapterhornDemProvider implements ElevationProvider {
     if (existing) return existing;
 
     const promise = (async () => {
-      const ctrl = new AbortController();
-      const timer = globalThis.setTimeout(() => ctrl.abort(), 5500);
-      try {
-        const url = MAPTERHORN_TILE_URL.replace("{x}", String(tx)).replace("{y}", String(ty));
-        const res = await fetch(url, { signal: ctrl.signal });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const blob = await res.blob();
-        const decoded = await this.decodeImagePixels(blob);
-        lruSet(this.tileCache, key, decoded, 24);
-        return decoded;
-      } finally {
-        globalThis.clearTimeout(timer);
+      const urls = [
+        MAPTERHORN_TILE_URL.replace("{x}", String(tx)).replace("{y}", String(ty)),
+        `https://elevation-tiles-prod.s3.amazonaws.com/terrarium/12/${tx}/${ty}.png`,
+      ];
+      const failures: string[] = [];
+      for (const url of urls) {
+        const ctrl = new AbortController();
+        const timer = globalThis.setTimeout(() => ctrl.abort(), 4000);
+        try {
+          const res = await fetch(url, { signal: ctrl.signal, mode: "cors" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          const decoded = await this.decodeImagePixels(blob);
+          lruSet(this.tileCache, key, decoded, 24);
+          return decoded;
+        } catch (err) {
+          failures.push(`${new URL(url).hostname}: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+          globalThis.clearTimeout(timer);
+        }
       }
+      throw new Error(`All Terrarium DEM providers failed (${failures.join("; ")})`);
     })();
 
     this.pendingTiles.set(key, promise);
@@ -1119,19 +1128,39 @@ export function classifyAreaDiagnostics(params: {
   if (params.poisCount === 0 && params.heritageCount === 0) missingCategories.push("pois");
   if (params.elevationStatus !== "available") missingCategories.push("elevation");
 
-  // Settlement classification from place tags, buildings, roads, waters & terrain relief
+  // Prefer the nearest mapped settlement label. A distant city label elsewhere in the
+  // requested tiles must not turn a small village into a dense city.
   let settlementType: GeoSettlementType = "unknown";
-  const placeClasses = params.places.map((p) => String(p.properties?.class ?? "").toLowerCase());
+  const placeCandidates = params.places
+    .filter((p) => p.geometry?.type === "Point")
+    .map((p) => {
+      const [placeLng, placeLat] = p.geometry.coordinates;
+      const dx = (placeLng - params.origin[0]) * Math.cos((params.origin[1] * Math.PI) / 180);
+      const dy = placeLat - params.origin[1];
+      return {
+        kind: String(p.properties?.class ?? "").toLowerCase(),
+        distanceMeters: Math.hypot(dx, dy) * 111_320,
+      };
+    })
+    .filter((p) => p.kind.length > 0)
+    .sort((a, b) => a.distanceMeters - b.distanceMeters);
+  const nearestPlace = placeCandidates.find((p) => p.distanceMeters <= 3000);
   const reliefSpan = params.maxElevationDelta - params.minElevationDelta;
   const hasBeachOrCoast = params.landcovers.some((lc) =>
     /sand|beach/.test(String(lc.properties?.class ?? lc.properties?.subclass ?? "").toLowerCase()),
   ) || (params.watersCount > 0 && params.buildingsCount < 85 && params.landusesCount < 20);
 
-  if (params.buildingsCount >= 55 || placeClasses.some((c) => c === "city" || c === "suburb" || c === "neighbourhood")) {
+  if (nearestPlace && ["city", "suburb", "neighbourhood", "quarter"].includes(nearestPlace.kind)) {
     settlementType = "dense_city";
-  } else if (params.buildingsCount >= 18 || placeClasses.includes("town")) {
+  } else if (nearestPlace?.kind === "town") {
     settlementType = "town";
-  } else if (params.buildingsCount >= 4 || placeClasses.includes("village") || placeClasses.includes("hamlet")) {
+  } else if (nearestPlace && ["village", "hamlet", "isolated_dwelling"].includes(nearestPlace.kind)) {
+    settlementType = "village";
+  } else if (params.buildingsCount >= 55) {
+    settlementType = "dense_city";
+  } else if (params.buildingsCount >= 18) {
+    settlementType = "town";
+  } else if (params.buildingsCount >= 4) {
     settlementType = "village";
   } else if (params.peaks.length > 0 || reliefSpan >= 28 || (params.originElevationMeters ?? 0) > 850) {
     settlementType = "mountain";
