@@ -894,8 +894,9 @@ export class MapterhornDemProvider implements ElevationProvider {
 
     const promise = (async () => {
       const urls = [
-        MAPTERHORN_TILE_URL.replace("{x}", String(tx)).replace("{y}", String(ty)),
+        `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/12/${tx}/${ty}.png`,
         `https://elevation-tiles-prod.s3.amazonaws.com/terrarium/12/${tx}/${ty}.png`,
+        MAPTERHORN_TILE_URL.replace("{x}", String(tx)).replace("{y}", String(ty)),
       ];
       const failures: string[] = [];
       for (const url of urls) {
@@ -967,9 +968,19 @@ export class MapterhornDemProvider implements ElevationProvider {
       { lng: lng + half / metersPerLng, lat: lat - half / 111_320 },
     ];
     const needed = new Map<string, { x: number; y: number }>();
+    // Load every DEM tile touched by the actual terrain grid, not just the
+    // origin and two diagonal corners (which can miss tiles on wide grids).
     for (const c of corners) {
       const t = lngLatToTile(c.lng, c.lat, 12);
       needed.set(`${t.x}/${t.y}`, { x: t.x, y: t.y });
+    }
+    for (let row = 0; row <= segments; row += 1) {
+      for (let col = 0; col <= segments; col += 1) {
+        const sampleLng = lng + ((col / segments) * sizeMeters - half) / metersPerLng;
+        const sampleLat = lat - ((row / segments) * sizeMeters - half) / 111_320;
+        const t = lngLatToTile(sampleLng, sampleLat, 12);
+        needed.set(`${t.x}/${t.y}`, { x: t.x, y: t.y });
+      }
     }
 
     const loadedTiles = new Map<string, DecodedDemTile>();
