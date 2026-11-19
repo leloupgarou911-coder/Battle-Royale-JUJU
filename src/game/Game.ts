@@ -973,6 +973,8 @@ export class Game {
     const roofBuckets = new Map<string, { mat: THREE.MeshStandardMaterial; geos: THREE.BufferGeometry[] }>();
     const ventPositions: { x: number; y: number; z: number }[] = [];
     const doorTransforms: { x: number; y: number; z: number; yaw: number }[] = [];
+    const facadeWindows: { x: number; y: number; z: number; yaw: number; width: number; tint: number }[] = [];
+    const windowTints = [0x9bb9c9, 0x7799ad, 0xb6c7d1, 0x6e8998, 0xc6d2d8];
 
     for (const b of snapshot.buildings) {
       if (b.outer.length < 4) continue;
@@ -1077,6 +1079,52 @@ export class Game {
       }
       rBucket.geos.push(roofCapGeo);
 
+      // Add real 3D window frames and glass to the mapped footprint instead of relying only on painted facade pixels.
+      // Keep this bounded for dense areas and use instancing to avoid a draw call per window.
+      if (facadeWindows.length < 2200 && extrudeDepth >= 2.5) {
+        const centroid = b.center;
+        const floorCount = Math.max(1, Math.min(10, Math.floor((extrudeDepth - 0.35) / 3.05)));
+        for (let edge = 0; edge < b.outer.length - 1 && facadeWindows.length < 2200; edge += 1) {
+          const a = b.outer[edge];
+          const p = b.outer[edge + 1];
+          const dx = p.x - a.x;
+          const dz = p.z - a.z;
+          const edgeLength = Math.hypot(dx, dz);
+          if (edgeLength < 4.6) continue;
+          const tangentX = dx / edgeLength;
+          const tangentZ = dz / edgeLength;
+          let normalX = -tangentZ;
+          let normalZ = tangentX;
+          const midX = (a.x + p.x) * 0.5;
+          const midZ = (a.z + p.z) * 0.5;
+          if (normalX * (midX - centroid.x) + normalZ * (midZ - centroid.z) < 0) {
+            normalX = -normalX;
+            normalZ = -normalZ;
+          }
+          const yaw = Math.atan2(-tangentZ, tangentX);
+          const windowsOnEdge = Math.max(1, Math.floor(edgeLength / 4.1));
+          const spacing = edgeLength / windowsOnEdge;
+          const winWidth = Math.min(1.42, spacing * 0.48);
+          const winHeight = Math.min(1.58, Math.max(1.05, extrudeDepth / floorCount * 0.5));
+          for (let floor = 0; floor < floorCount && facadeWindows.length < 2200; floor += 1) {
+            const floorHeight = extrudeDepth / floorCount;
+            const winY = b.baseHeight + groundY + floor * floorHeight + floorHeight * 0.57;
+            if (winY > b.baseHeight + groundY + extrudeDepth - 0.5) continue;
+            for (let w = 0; w < windowsOnEdge && facadeWindows.length < 2200; w += 1) {
+              const along = (w + 0.5) * spacing - edgeLength * 0.5;
+              facadeWindows.push({
+                x: midX + tangentX * along + normalX * 0.09,
+                y: winY,
+                z: midZ + tangentZ * along + normalZ * 0.09,
+                yaw,
+                width: winWidth,
+                tint: windowTints[(Math.abs(Math.round(midX + midZ + floor * 7 + w)) % windowTints.length)],
+              });
+            }
+          }
+        }
+      }
+
       const footprintW = b.bounds.maxX - b.bounds.minX;
       const footprintD = b.bounds.maxZ - b.bounds.minZ;
       if (footprintW > 11 && footprintD > 11 && b.kind !== "house" && ventPositions.length < 120) {
@@ -1101,6 +1149,54 @@ export class Game {
           yaw: b.entranceYaw,
         });
       }
+    }
+
+    if (facadeWindows.length > 0) {
+      const frameGeo = new THREE.BoxGeometry(1, 1, 0.16);
+      const glassGeo = new THREE.BoxGeometry(1, 1, 0.07);
+      const sillGeo = new THREE.BoxGeometry(1, 1, 0.2);
+      const frameMat = new THREE.MeshStandardMaterial({ color: 0xd5d0c6, roughness: 0.68, metalness: 0.08 });
+      const glassMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff, roughness: 0.24, metalness: 0.18,
+        emissive: 0x172b36, emissiveIntensity: 0.08,
+      });
+      const sillMat = new THREE.MeshStandardMaterial({ color: 0xb8b2a7, roughness: 0.76 });
+      const frames = new THREE.InstancedMesh(frameGeo, frameMat, facadeWindows.length);
+      const glasses = new THREE.InstancedMesh(glassGeo, glassMat, facadeWindows.length);
+      const sills = new THREE.InstancedMesh(sillGeo, sillMat, facadeWindows.length);
+      const dummy = new THREE.Object3D();
+      const tint = new THREE.Color();
+      facadeWindows.forEach((w, idx) => {
+        dummy.position.set(w.x, w.y, w.z);
+        dummy.rotation.set(0, w.yaw, 0);
+        dummy.scale.set(w.width + 0.18, 1.72, 1);
+        dummy.updateMatrix();
+        frames.setMatrixAt(idx, dummy.matrix);
+        frames.setColorAt(idx, tint.setHex(idx % 7 === 0 ? 0xc7bcae : idx % 5 === 0 ? 0xaaa69d : 0xe2ddd3));
+
+        dummy.position.set(w.x, w.y, w.z + 0.015);
+        dummy.scale.set(w.width, 1.42, 1);
+        dummy.updateMatrix();
+        glasses.setMatrixAt(idx, dummy.matrix);
+        glasses.setColorAt(idx, tint.setHex(w.tint));
+
+        dummy.position.set(w.x, w.y - 0.88, w.z + 0.055);
+        dummy.scale.set(w.width + 0.3, 0.13, 1);
+        dummy.updateMatrix();
+        sills.setMatrixAt(idx, dummy.matrix);
+      });
+      frames.instanceMatrix.needsUpdate = true;
+      glasses.instanceMatrix.needsUpdate = true;
+      sills.instanceMatrix.needsUpdate = true;
+      if (frames.instanceColor) frames.instanceColor.needsUpdate = true;
+      if (glasses.instanceColor) glasses.instanceColor.needsUpdate = true;
+      frames.computeBoundingSphere();
+      glasses.computeBoundingSphere();
+      sills.computeBoundingSphere();
+      frames.name = "real-3d-window-frames";
+      glasses.name = "real-3d-window-glass";
+      sills.name = "real-3d-window-sills";
+      this.worldChunkGroup.add(frames, glasses, sills);
     }
 
     for (const bucket of wallBuckets.values()) {
