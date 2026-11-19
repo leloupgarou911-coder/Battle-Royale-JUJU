@@ -944,6 +944,86 @@ export class MapterhornDemProvider implements ElevationProvider {
     return top * (1 - fy) + bot * fy;
   }
 
+  private async fetchOpenMeteoFallback(
+    lng: number,
+    lat: number,
+    sizeMeters: number,
+    segments: number,
+    signal?: AbortSignal,
+  ) {
+    // Open-Meteo's Copernicus GLO-90 elevation endpoint is a reliable point-data
+    // fallback when raster tile providers fail CORS or are unavailable.
+    const coarseSegments = 8; // 9x9 = 81 coordinates, within the API's 100-point limit.
+    const metersPerLng = Math.max(1000, 111_320 * Math.cos((lat * Math.PI) / 180));
+    const half = sizeMeters * 0.5;
+    const coords: { lng: number; lat: number; x: number; z: number }[] = [];
+    for (let row = 0; row <= coarseSegments; row += 1) {
+      for (let col = 0; col <= coarseSegments; col += 1) {
+        const x = -half + (col / coarseSegments) * sizeMeters;
+        const z = -half + (row / coarseSegments) * sizeMeters;
+        coords.push({ x, z, lng: lng + x / metersPerLng, lat: lat - z / 111_320 });
+      }
+    }
+    const params = new URLSearchParams({
+      latitude: coords.map((p) => p.lat.toFixed(6)).join(","),
+      longitude: coords.map((p) => p.lng.toFixed(6)).join(","),
+    });
+    const ctrl = new AbortController();
+    const timeout = globalThis.setTimeout(() => ctrl.abort(), 8000);
+    const abort = () => ctrl.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    try {
+      const res = await fetch(`https://api.open-meteo.com/v1/elevation?${params.toString()}`, {
+        signal: ctrl.signal,
+        mode: "cors",
+      });
+      if (!res.ok) throw new Error(`Open-Meteo HTTP ${res.status}`);
+      const payload = (await res.json()) as { elevation?: unknown };
+      if (!Array.isArray(payload.elevation) || payload.elevation.length !== coords.length ||
+        !payload.elevation.every((v) => typeof v === "number" && Number.isFinite(v))) {
+        throw new Error("Open-Meteo returned an invalid elevation grid");
+      }
+      const coarse = payload.elevation as number[];
+      const originElevation = coarse[(coarseSegments / 2) * (coarseSegments + 1) + coarseSegments / 2];
+      const sampleCoarse = (gx: number, gy: number): number => {
+        const x0 = Math.max(0, Math.min(coarseSegments, Math.floor(gx)));
+        const y0 = Math.max(0, Math.min(coarseSegments, Math.floor(gy)));
+        const x1 = Math.min(coarseSegments, x0 + 1);
+        const y1 = Math.min(coarseSegments, y0 + 1);
+        const fx = gx - x0, fy = gy - y0;
+        const at = (x: number, y: number) => coarse[y * (coarseSegments + 1) + x];
+        const top = at(x0, y0) * (1 - fx) + at(x1, y0) * fx;
+        const bot = at(x0, y1) * (1 - fx) + at(x1, y1) * fx;
+        return top * (1 - fy) + bot * fy;
+      };
+      const terrain: TerrainElevationSample[] = [];
+      let minDelta = Infinity, maxDelta = -Infinity;
+      for (let row = 0; row <= segments; row++) {
+        for (let col = 0; col <= segments; col++) {
+          const x = -half + (col / segments) * sizeMeters;
+          const z = -half + (row / segments) * sizeMeters;
+          const absElevation = sampleCoarse((col / segments) * coarseSegments, (row / segments) * coarseSegments);
+          const delta = Math.max(-45, Math.min(180, absElevation - originElevation));
+          minDelta = Math.min(minDelta, delta);
+          maxDelta = Math.max(maxDelta, delta);
+          terrain.push({ x, z, elevation: Math.round(delta * 100) / 100 });
+        }
+      }
+      return {
+        status: "available" as const,
+        terrain,
+        originElevationMeters: Math.round(originElevation * 10) / 10,
+        minElevationDelta: Math.round(minDelta * 10) / 10,
+        maxElevationDelta: Math.round(maxDelta * 10) / 10,
+        sourceLabel: "Open-Meteo / Copernicus GLO-90 (raster fallback)",
+        error: "Terrarium raster tiles unavailable; using Copernicus GLO-90 elevation grid fallback.",
+      };
+    } finally {
+      globalThis.clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+    }
+  }
+
   async fetchTerrainGrid(
     lng: number,
     lat: number,
@@ -1004,15 +1084,20 @@ export class MapterhornDemProvider implements ElevationProvider {
     const originTile = lngLatToTile(lng, lat, 12);
     const originKey = `${originTile.x}/${originTile.y}`;
     if (!loadedTiles.has(originKey)) {
-      return {
-        status: "error" as const,
-        terrain: [],
-        originElevationMeters: null,
-        minElevationDelta: 0,
-        maxElevationDelta: 0,
-        sourceLabel: "Terrarium DEM",
-        error: `DEM origin tile unavailable: ${failedTiles.join("; ")}`,
-      };
+      try {
+        return await this.fetchOpenMeteoFallback(lng, lat, sizeMeters, segments, signal);
+      } catch (fallbackError) {
+        if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+        return {
+          status: "error" as const,
+          terrain: [],
+          originElevationMeters: null,
+          minElevationDelta: 0,
+          maxElevationDelta: 0,
+          sourceLabel: "Terrarium DEM / Open-Meteo fallback",
+          error: `DEM raster and point fallback unavailable. Raster: ${failedTiles.join("; ")}. Fallback: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+        };
+      }
     }
 
     const sampleGeo = (sLng: number, sLat: number, fallbackElevation = 0): number => {
