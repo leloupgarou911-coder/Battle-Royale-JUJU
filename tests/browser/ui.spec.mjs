@@ -46,10 +46,11 @@ test("unified Tactical 3D Earth Arena, localization, synced mini-map, arena mode
   // Verify movement, jump, zoom controls & synchronized mini-map readout update
   const initial3dPosition = await page.locator("#game-3d-position").textContent();
   const initialMiniCoords = await page.locator("#mini-map-coordinates").textContent();
-  const forward3d = page.locator('[data-3d-move="w"]');
-  await forward3d.dispatchEvent("pointerdown", { pointerId: 1 });
+  // Exercise the real keyboard input path rather than synthesizing pointer events
+  // that do not model a physical press/release reliably in Playwright.
+  await page.keyboard.down("w");
   await page.waitForTimeout(950);
-  await forward3d.dispatchEvent("pointerup", { pointerId: 1 });
+  await page.keyboard.up("w");
   await page.locator("#game-3d-jump").click();
   await page.locator("#arena-zoom-in").click();
   await page.waitForTimeout(250);
