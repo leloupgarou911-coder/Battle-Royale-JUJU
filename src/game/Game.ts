@@ -974,6 +974,7 @@ export class Game {
     const ventPositions: { x: number; y: number; z: number }[] = [];
     const doorTransforms: { x: number; y: number; z: number; yaw: number }[] = [];
     const facadeWindows: { x: number; y: number; z: number; yaw: number; width: number; tint: number }[] = [];
+    const balconyTransforms: { x: number; y: number; z: number; yaw: number; width: number }[] = [];
     const windowTints = [0x9bb9c9, 0x7799ad, 0xb6c7d1, 0x6e8998, 0xc6d2d8];
 
     for (const b of snapshot.buildings) {
@@ -1112,14 +1113,20 @@ export class Game {
             if (winY > b.baseHeight + groundY + extrudeDepth - 0.5) continue;
             for (let w = 0; w < windowsOnEdge && facadeWindows.length < 2200; w += 1) {
               const along = (w + 0.5) * spacing - edgeLength * 0.5;
+              const windowX = midX + tangentX * along + normalX * 0.13;
+              const windowZ = midZ + tangentZ * along + normalZ * 0.13;
               facadeWindows.push({
-                x: midX + tangentX * along + normalX * 0.09,
+                x: windowX,
                 y: winY,
-                z: midZ + tangentZ * along + normalZ * 0.09,
+                z: windowZ,
                 yaw,
                 width: winWidth,
                 tint: windowTints[(Math.abs(Math.round(midX + midZ + floor * 7 + w)) % windowTints.length)],
               });
+              // Add small, real 3D balconies on selected apartment windows; deterministic placement keeps cities consistent.
+              if (b.kind === "apartment" && floor > 0 && ((w + edge + floor) % 3 === 0) && balconyTransforms.length < 420) {
+                balconyTransforms.push({ x: windowX, y: winY - 0.82, z: windowZ, yaw, width: Math.min(2.05, winWidth + 0.42) });
+              }
             }
           }
         }
@@ -1197,6 +1204,51 @@ export class Game {
       glasses.name = "real-3d-window-glass";
       sills.name = "real-3d-window-sills";
       this.worldChunkGroup.add(frames, glasses, sills);
+    }
+
+    if (balconyTransforms.length > 0 && this.qualityTier !== "performance") {
+      const slabGeo = new THREE.BoxGeometry(1, 0.14, 0.82);
+      const railGeo = new THREE.BoxGeometry(1, 0.065, 0.07);
+      const postGeo = new THREE.BoxGeometry(0.055, 0.56, 0.055);
+      const slabMat = new THREE.MeshStandardMaterial({ color: 0x8e8b82, roughness: 0.82 });
+      const railMat = new THREE.MeshStandardMaterial({ color: 0xb9c0c2, roughness: 0.52, metalness: 0.55 });
+      const slabs = new THREE.InstancedMesh(slabGeo, slabMat, balconyTransforms.length);
+      const rails = new THREE.InstancedMesh(railGeo, railMat, balconyTransforms.length);
+      const posts = new THREE.InstancedMesh(postGeo, railMat, balconyTransforms.length * 5);
+      const dummy = new THREE.Object3D();
+      balconyTransforms.forEach((b, idx) => {
+        dummy.position.set(b.x, b.y, b.z);
+        dummy.rotation.set(0, b.yaw, 0);
+        dummy.scale.set(b.width, 1, 1);
+        dummy.updateMatrix();
+        slabs.setMatrixAt(idx, dummy.matrix);
+
+        dummy.position.set(b.x, b.y + 0.43, b.z);
+        dummy.scale.set(b.width, 1, 1);
+        dummy.updateMatrix();
+        rails.setMatrixAt(idx, dummy.matrix);
+
+        for (let post = 0; post < 5; post += 1) {
+          const localX = (post / 4 - 0.5) * b.width;
+          const localZ = 0.36;
+          const c = Math.cos(b.yaw), s = Math.sin(b.yaw);
+          dummy.position.set(b.x + localX * c + localZ * s, b.y + 0.15, b.z - localX * s + localZ * c);
+          dummy.rotation.set(0, b.yaw, 0);
+          dummy.scale.set(1, 1, 1);
+          dummy.updateMatrix();
+          posts.setMatrixAt(idx * 5 + post, dummy.matrix);
+        }
+      });
+      slabs.instanceMatrix.needsUpdate = true;
+      rails.instanceMatrix.needsUpdate = true;
+      posts.instanceMatrix.needsUpdate = true;
+      slabs.computeBoundingSphere();
+      rails.computeBoundingSphere();
+      posts.computeBoundingSphere();
+      slabs.name = "apartment-balcony-slabs";
+      rails.name = "apartment-balcony-rails";
+      posts.name = "apartment-balcony-posts";
+      this.worldChunkGroup.add(slabs, rails, posts);
     }
 
     for (const bucket of wallBuckets.values()) {
