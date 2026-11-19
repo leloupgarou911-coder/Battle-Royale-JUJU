@@ -1,0 +1,52 @@
+name: JUJU WORLD Unreal Prototype Scaffold
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "unreal/**"
+      - ".github/workflows/unreal-prototype.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-prototype-scaffold:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Unreal project descriptor and prototype configuration
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          project_path = Path("unreal/JUJUWorldUE/JUJUWorldUE.uproject")
+          config_path = Path("unreal/PROTOTYPE_CONFIG.json")
+          readme_path = Path("unreal/README.md")
+
+          project = json.loads(project_path.read_text(encoding="utf-8"))
+          config = json.loads(config_path.read_text(encoding="utf-8"))
+          readme = readme_path.read_text(encoding="utf-8")
+
+          assert project.get("FileVersion") == 3, "Unexpected .uproject descriptor version"
+          assert any(m.get("Name") == "JUJUWorldUE" for m in project.get("Modules", [])), "Missing game module descriptor"
+          assert any(p.get("Name") == "CesiumForUnreal" and p.get("Enabled") for p in project.get("Plugins", [])), "Cesium plugin is not enabled in descriptor"
+          assert config["prototype"] == "Chamonix, France"
+          assert abs(config["coordinates"]["latitude"] - 45.9237) < 1e-6
+          assert abs(config["coordinates"]["longitude"] - 6.8694) < 1e-6
+          assert len(config["acceptanceChecks"]) >= 5, "Acceptance criteria incomplete"
+          assert "not yet a completed Unreal game" in readme, "Limitations must be explicit"
+          print("PASS: JSON descriptors, Cesium flag, Chamonix coordinates and prototype acceptance checks are valid.")
+          print("NOTE: This CI does not run Unreal Engine or verify visuals. UE binaries, Cesium plugin and a provisioned runner are required for an engine build.")
+          PY
+
+      - name: Upload prototype specification
+        uses: actions/upload-artifact@v4
+        with:
+          name: juju-unreal-prototype-spec
+          path: unreal/
+          if-no-files-found: error
