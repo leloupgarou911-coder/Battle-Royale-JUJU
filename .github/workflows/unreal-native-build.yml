@@ -1,0 +1,51 @@
+name: JUJU WORLD Unreal Native Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-unreal:
+    # Requires a self-hosted Windows runner with UE 5.5 and custom label 'unreal'.
+    runs-on: [self-hosted, windows, x64, unreal]
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Locate Unreal Engine installation
+        shell: pwsh
+        run: |
+          $candidates = @()
+          if ($env:UE_ROOT) { $candidates += $env:UE_ROOT }
+          $candidates += 'C:\Program Files\Epic Games\UE_5.5'
+          $candidates += 'D:\Epic Games\UE_5.5'
+          $engine = $candidates | Where-Object { Test-Path (Join-Path $_ 'Engine\Build\BatchFiles\Build.bat') } | Select-Object -First 1
+          if (-not $engine) { throw 'UE 5.5 not found. Set UE_ROOT on this runner to the engine directory.' }
+          'UE_ROOT=' + $engine | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Found Unreal Engine at: $engine"
+
+      - name: Validate project descriptor
+        shell: pwsh
+        run: |
+          $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\JUJUWorldUE\JUJUWorldUE.uproject'
+          if (!(Test-Path $project)) { throw 'Project descriptor missing.' }
+          Get-Content $project -Raw | ConvertFrom-Json | Out-Null
+
+      - name: Compile JUJUWorldUE Win64 Development
+        shell: pwsh
+        run: |
+          $build = Join-Path $env:UE_ROOT 'Engine\Build\BatchFiles\Build.bat'
+          $project = Join-Path $env:GITHUB_WORKSPACE 'unreal\JUJUWorldUE\JUJUWorldUE.uproject'
+          & $build 'JUJUWorldUE' 'Win64' 'Development' "-Project=$project" '-WaitMutex' '-NoHotReloadFromIDE'
+          if ($LASTEXITCODE -ne 0) { throw "Unreal Build Tool failed with exit code $LASTEXITCODE" }
+
+      - name: Upload Unreal build output/logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: juju-unreal-native-build-logs
+          path: unreal/JUJUWorldUE/Saved/Logs/
+          if-no-files-found: ignore
