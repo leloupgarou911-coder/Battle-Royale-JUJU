@@ -18,35 +18,57 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate Unreal project descriptor and prototype configuration
+      - name: Validate project descriptors, source structure and prototype criteria
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
 
-          project_path = Path("unreal/JUJUWorldUE/JUJUWorldUE.uproject")
+          root = Path("unreal/JUJUWorldUE")
+          project_path = root / "JUJUWorldUE.uproject"
           config_path = Path("unreal/PROTOTYPE_CONFIG.json")
-          readme_path = Path("unreal/README.md")
+          readme_path = Path("unreal/README.md"
 
           project = json.loads(project_path.read_text(encoding="utf-8"))
           config = json.loads(config_path.read_text(encoding="utf-8"))
           readme = readme_path.read_text(encoding="utf-8")
 
+          required = [
+              root / "Source/JUJUWorldUE/JUJUWorldUE.Build.cs",
+              root / "Source/JUJUWorldUE/JUJUWorldUE.cpp",
+              root / "Source/JUJUWorldUE/JUJUWorldUE.h",
+              root / "Source/JUJUWorldUE/JUJUExplorerPawn.cpp",
+              root / "Source/JUJUWorldUE/JUJUExplorerPawn.h",
+              root / "Source/JUJUWorldUE/JUJUWorldGameMode.cpp",
+              root / "Source/JUJUWorldUE/JUJUWorldGameMode.h",
+              root / "Source/JUJUWorldUE.Target.cs",
+              root / "Source/JUJUWorldUEEditor.Target.cs",
+              root / "Config/DefaultInput.ini",
+              root / "Config/DefaultEngine.ini",
+          ]
+          missing = [str(p) for p in required if not p.is_file()]
+          assert not missing, "Missing Unreal source/config files: " + ", ".join(missing)
+
           assert project.get("FileVersion") == 3, "Unexpected .uproject descriptor version"
-          assert any(m.get("Name") == "JUJUWorldUE" for m in project.get("Modules", [])), "Missing game module descriptor"
-          assert any(p.get("Name") == "CesiumForUnreal" and p.get("Enabled") for p in project.get("Plugins", [])), "Cesium plugin is not enabled in descriptor"
+          assert any(m.get("Name") == "JUJUWorldUE" for m in project.get("Modules", [])), "Missing game module"
+          assert any(p.get("Name") == "CesiumForUnreal" and p.get("Enabled") for p in project.get("Plugins", [])), "Cesium plugin is not enabled"
           assert config["prototype"] == "Chamonix, France"
           assert abs(config["coordinates"]["latitude"] - 45.9237) < 1e-6
           assert abs(config["coordinates"]["longitude"] - 6.8694) < 1e-6
           assert len(config["acceptanceChecks"]) >= 5, "Acceptance criteria incomplete"
+
+          pawn = (root / "Source/JUJUWorldUE/JUJUExplorerPawn.cpp").read_text(encoding="utf-8")
+          for token in ["BindAxis", "MoveForward", "MoveRight", "Turn", "LookUp"]:
+              assert token in pawn, f"Pawn input implementation missing: {token}"
           assert "not yet a completed Unreal game" in readme, "Limitations must be explicit"
-          print("PASS: JSON descriptors, Cesium flag, Chamonix coordinates and prototype acceptance checks are valid.")
-          print("NOTE: This CI does not run Unreal Engine or verify visuals. UE binaries, Cesium plugin and a provisioned runner are required for an engine build.")
+
+          print("PASS: project/module descriptors, required C++ scaffold, input bindings, Cesium flag and Chamonix configuration validated.")
+          print("LIMIT: CI checks source structure only. Unreal Engine compilation, Cesium runtime, scene visuals and FPS are NOT tested on this runner.")
           PY
 
-      - name: Upload prototype specification
+      - name: Upload Unreal prototype source scaffold
         uses: actions/upload-artifact@v4
         with:
-          name: juju-unreal-prototype-spec
+          name: juju-unreal-prototype-scaffold
           path: unreal/
           if-no-files-found: error
