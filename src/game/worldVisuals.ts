@@ -54,72 +54,72 @@ export function createBuildingFacadeTexture(
     }
   }
 
+  // Draw a believable facade atlas with masonry seams, varied windows and architectural trims.
+  // The separate instanced 3D window pass adds depth at gameplay distance.
+  const masonry = kind === "industrial" ? 32 : kind === "office" ? 12 : 20;
+  ctx.strokeStyle = "rgba(65,54,43,0.10)";
+  ctx.lineWidth = 1;
+  for (let y = 24; y < 256; y += masonry) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(256, y); ctx.stroke();
+  }
   if (kind === "industrial") {
-    ctx.fillStyle = "rgba(0,0,0,0.08)";
-    for (let x = 0; x < 256; x += 16) {
-      ctx.fillRect(x, 0, 4, 256);
+    ctx.fillStyle = "rgba(0,0,0,0.07)";
+    for (let x = 0; x < 256; x += 24) ctx.fillRect(x, 0, 3, 256);
+    for (let row = 0; row < 3; row += 1) {
+      for (let col = 0; col < 4; col += 1) {
+        const x = 12 + col * 60, y = 30 + row * 66;
+        ctx.fillStyle = "#394b55"; ctx.fillRect(x, y, 42, 34);
+        ctx.fillStyle = "#718e9c"; ctx.fillRect(x + 3, y + 3, 36, 28);
+        ctx.fillStyle = "rgba(220,238,245,0.18)"; ctx.fillRect(x + 4, y + 3, 8, 28);
+      }
     }
-    ctx.fillStyle = "#2b424f";
-    ctx.fillRect(14, 44, 100, 44);
-    ctx.fillRect(142, 44, 100, 44);
-    ctx.fillStyle = "rgba(180,224,240,0.28)";
-    ctx.fillRect(18, 48, 92, 34);
-    ctx.fillRect(146, 48, 92, 34);
   } else if (kind === "office") {
-    ctx.fillStyle = "#314756";
-    ctx.fillRect(12, 34, 104, 186);
-    ctx.fillRect(140, 34, 104, 186);
-    for (const bx of [16, 144]) {
-      const grad = ctx.createLinearGradient(bx, 38, bx + 96, 214);
-      grad.addColorStop(0, "#4c7891");
-      grad.addColorStop(0.55, "#264254");
-      grad.addColorStop(1, "#1a2f3d");
-      ctx.fillStyle = grad;
-      ctx.fillRect(bx, 38, 96, 178);
-      ctx.fillStyle = "rgba(255, 224, 165, 0.22)";
-      ctx.fillRect(bx + 8, 120, 36, 78);
-      ctx.fillStyle = "#22313b";
-      ctx.fillRect(bx + 46, 38, 4, 178);
-      ctx.fillRect(bx, 122, 96, 4);
+    ctx.fillStyle = "#263c49"; ctx.fillRect(8, 26, 240, 222);
+    const cols = 6, rows = 5, gapX = 7, gapY = 8, winW = 31, winH = 36;
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        const x = 14 + col * (winW + gapX), y = 32 + row * (winH + gapY);
+        const lit = hashUnit(row * 71 + col * 19 + wallColorHex) > 0.72;
+        ctx.fillStyle = lit ? "#9d8763" : "#304b5c"; ctx.fillRect(x, y, winW, winH);
+        ctx.fillStyle = lit ? "rgba(255,224,158,0.32)" : "rgba(170,212,231,0.18)";
+        ctx.fillRect(x + 3, y + 3, 5, winH - 6);
+        ctx.strokeStyle = "#b8c3c9"; ctx.lineWidth = 2; ctx.strokeRect(x, y, winW, winH);
+      }
     }
   } else {
-    const bays = [30, 150];
-    bays.forEach((bx, idx) => {
-      const winW = kind === "shop" ? 84 : 74;
-      const winH = kind === "house" ? 116 : 136;
-      const winY = kind === "house" ? 64 : 52;
-
-      ctx.fillStyle = toCssHex(wallColorHex, -0.14);
-      ctx.fillRect(bx - 5, winY - 6, winW + 10, winH + 12);
-
-      const lit = hashUnit(bx + wallColorHex + idx * 17) > 0.56;
-      const glassGrad = ctx.createLinearGradient(bx, winY, bx, winY + winH);
-      if (lit) {
-        glassGrad.addColorStop(0, "#345163");
-        glassGrad.addColorStop(0.45, "#6b6552");
-        glassGrad.addColorStop(1, "#caa465");
-      } else {
-        glassGrad.addColorStop(0, "#375569");
-        glassGrad.addColorStop(0.6, "#223847");
-        glassGrad.addColorStop(1, "#162631");
-      }
-      ctx.fillStyle = glassGrad;
-      ctx.fillRect(bx, winY, winW, winH);
-
-      ctx.fillStyle = "#e8e3d9";
-      ctx.fillRect(bx + winW * 0.5 - 2, winY, 4, winH);
-      ctx.fillRect(bx, winY + winH * 0.48 - 2, winW, 4);
-
-      if (kind === "apartment" || kind === "civic") {
-        ctx.fillStyle = "#232a2e";
-        ctx.fillRect(bx - 4, winY + winH - 26, winW + 8, 4);
-        for (let r = bx; r < bx + winW; r += 10) {
-          ctx.fillRect(r, winY + winH - 26, 2, 26);
+    const columns = kind === "house" ? 3 : kind === "shop" ? 2 : 4;
+    const rows = kind === "house" ? 2 : 4;
+    const cellW = 256 / columns, cellH = 224 / rows;
+    const winW = kind === "house" ? 36 : kind === "shop" ? 82 : 42;
+    const winH = kind === "house" ? 52 : kind === "shop" ? 56 : 48;
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < columns; col += 1) {
+        const x = (col + 0.5) * cellW - winW / 2 + (hashUnit(col * 29 + row * 17 + wallColorHex) - 0.5) * 3;
+        const y = 28 + row * cellH + (cellH - winH) / 2;
+        const lit = hashUnit(col * 41 + row * 23 + wallColorHex) > 0.78;
+        const frame = kind === "apartment" || kind === "civic" ? "#d5c8b6" : "#786b5c";
+        ctx.fillStyle = toCssHex(wallColorHex, -0.16); ctx.fillRect(x - 4, y - 5, winW + 8, winH + 10);
+        ctx.fillStyle = lit ? "#a28b68" : "#203947"; ctx.fillRect(x, y, winW, winH);
+        const grad = ctx.createLinearGradient(x, y, x + winW, y + winH);
+        grad.addColorStop(0, lit ? "#a99670" : "#57788d");
+        grad.addColorStop(0.48, lit ? "#746b59" : "#304d61");
+        grad.addColorStop(1, lit ? "#c3a879" : "#182c39");
+        ctx.fillStyle = grad; ctx.fillRect(x + 2, y + 2, winW - 4, winH - 4);
+        ctx.fillStyle = "rgba(220,239,248,0.18)"; ctx.fillRect(x + 4, y + 3, Math.max(3, winW * 0.12), winH - 6);
+        ctx.strokeStyle = frame; ctx.lineWidth = 3; ctx.strokeRect(x, y, winW, winH);
+        ctx.fillStyle = frame; ctx.fillRect(x + winW * 0.5 - 1.5, y, 3, winH);
+        if (kind !== "house") ctx.fillRect(x, y + winH * 0.5 - 1.5, winW, 3);
+        ctx.fillStyle = toCssHex(wallColorHex, 0.1); ctx.fillRect(x - 6, y + winH + 3, winW + 12, 4);
+        if (kind === "apartment" || kind === "civic") {
+          ctx.fillStyle = "#50483e"; ctx.fillRect(x - 2, y + winH - 12, winW + 4, 3);
         }
       }
-      ctx.fillStyle = toCssHex(wallColorHex, 0.12);
-      ctx.fillRect(bx - 7, winY + winH + 2, winW + 14, 7);
-    });
+    }
+    if (kind === "shop") {
+      ctx.fillStyle = "#3c514e"; ctx.fillRect(12, 178, 232, 58);
+      ctx.fillStyle = "#5b8290"; ctx.fillRect(18, 184, 220, 46);
+      ctx.fillStyle = "rgba(245,230,187,0.16)"; ctx.fillRect(22, 188, 60, 38);
+    }
   }
 
   const texture = new THREE.CanvasTexture(canvas);
