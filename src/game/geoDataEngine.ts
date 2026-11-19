@@ -978,20 +978,25 @@ export class MapterhornDemProvider implements ElevationProvider {
         mode: "cors",
       });
       if (!res.ok) throw new Error(`Open-Meteo HTTP ${res.status}`);
-      const payload = (await res.json()) as { elevation?: unknown };
-      if (!Array.isArray(payload.elevation) || payload.elevation.length !== coords.length ||
-        !payload.elevation.every((v) => typeof v === "number" && Number.isFinite(v))) {
-        throw new Error("Open-Meteo returned an invalid elevation grid");
+      const payload = (await res.json()) as unknown;
+      // Open-Meteo returns a list of per-location objects for multi-coordinate
+      // requests; accept the documented array shape and a flat legacy shape.
+      const coarse = Array.isArray(payload)
+        ? payload.map((item) => (item as { elevation?: unknown } | null)?.elevation)
+        : (payload as { elevation?: unknown } | null)?.elevation;
+      if (!Array.isArray(coarse) || coarse.length !== coords.length ||
+        !coarse.every((v) => typeof v === "number" && Number.isFinite(v))) {
+        throw new Error("Open-Meteo returned an invalid multi-location elevation response");
       }
-      const coarse = payload.elevation as number[];
-      const originElevation = coarse[(coarseSegments / 2) * (coarseSegments + 1) + coarseSegments / 2];
+      const elevations = coarse as number[];
+      const originElevation = elevations[(coarseSegments / 2) * (coarseSegments + 1) + coarseSegments / 2];
       const sampleCoarse = (gx: number, gy: number): number => {
         const x0 = Math.max(0, Math.min(coarseSegments, Math.floor(gx)));
         const y0 = Math.max(0, Math.min(coarseSegments, Math.floor(gy)));
         const x1 = Math.min(coarseSegments, x0 + 1);
         const y1 = Math.min(coarseSegments, y0 + 1);
         const fx = gx - x0, fy = gy - y0;
-        const at = (x: number, y: number) => coarse[y * (coarseSegments + 1) + x];
+        const at = (x: number, y: number) => elevations[y * (coarseSegments + 1) + x];
         const top = at(x0, y0) * (1 - fx) + at(x1, y0) * fx;
         const bot = at(x0, y1) * (1 - fx) + at(x1, y1) * fx;
         return top * (1 - fy) + bot * fy;
