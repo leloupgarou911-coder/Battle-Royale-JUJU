@@ -986,30 +986,39 @@ export class MapterhornDemProvider implements ElevationProvider {
     }
 
     const loadedTiles = new Map<string, DecodedDemTile>();
-    try {
-      await Promise.all(
-        [...needed.values()].map(async (t) => {
-          const tile = await raceWithAbort(this.fetchTile(t.x, t.y), signal);
-          loadedTiles.set(`${t.x}/${t.y}`, tile);
-        }),
-      );
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") throw err;
+    const failedTiles: string[] = [];
+    const tileResults = await Promise.allSettled(
+      [...needed.values()].map(async (t) => {
+        const tile = await raceWithAbort(this.fetchTile(t.x, t.y), signal);
+        loadedTiles.set(`${t.x}/${t.y}`, tile);
+      }),
+    );
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    tileResults.forEach((result, index) => {
+      if (result.status === "rejected") {
+        const tile = [...needed.values()][index];
+        failedTiles.push(`${tile.x}/${tile.y}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`);
+      }
+    });
+
+    const originTile = lngLatToTile(lng, lat, 12);
+    const originKey = `${originTile.x}/${originTile.y}`;
+    if (!loadedTiles.has(originKey)) {
       return {
         status: "error" as const,
         terrain: [],
         originElevationMeters: null,
         minElevationDelta: 0,
         maxElevationDelta: 0,
-        sourceLabel: "Mapterhorn Terrarium DEM",
-        error: `DEM: ${err instanceof Error ? err.message : String(err)}`,
+        sourceLabel: "Terrarium DEM",
+        error: `DEM origin tile unavailable: ${failedTiles.join("; ")}`,
       };
     }
 
-    const sampleGeo = (sLng: number, sLat: number): number => {
+    const sampleGeo = (sLng: number, sLat: number, fallbackElevation = 0): number => {
       const p = lngLatToTilePixel(sLng, sLat, 12, 512);
       const tile = loadedTiles.get(`${p.tileX}/${p.tileY}`);
-      if (!tile) return 0;
+      if (!tile) return fallbackElevation;
       const sx = (p.px / 512) * tile.width;
       const sy = (p.py / 512) * tile.height;
       return this.sampleBilinear(tile, sx, sy);
@@ -1026,7 +1035,7 @@ export class MapterhornDemProvider implements ElevationProvider {
         const z = -half + (row / segments) * sizeMeters;
         const sLng = lng + x / metersPerLng;
         const sLat = lat - z / 111_320;
-        const absElev = sampleGeo(sLng, sLat);
+        // Missing neighboring tiles use the origin height as a local flat fallback.\n        // A single unavailable tile must not erase valid elevation data for the whole area.\n        const absElev = sampleGeo(sLng, sLat, originElevation);
         // Keep sea-level oceans slightly below 0 if real ocean floor / shoreline is negative while spawn at origin sits around y = 0
         const delta = Math.max(-45, Math.min(180, absElev - originElevation));
         if (delta < minDelta) minDelta = delta;
