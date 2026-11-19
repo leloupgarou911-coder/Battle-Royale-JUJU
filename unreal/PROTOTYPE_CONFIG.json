@@ -1,0 +1,38 @@
+{
+  "prototype": "Chamonix, France",
+  "coordinates": {
+    "latitude": 45.9237,
+    "longitude": 6.8694,
+    "heightMeters": 1000
+  },
+  "world": {
+    "coordinateReference": "WGS84",
+    "streaming": "Cesium 3D Tiles; load only around player",
+    "initialRadiusKm": 5,
+    "worldScale": "real-world geographic scale"
+  },
+  "visualTargets": [
+    "real elevation terrain",
+    "natural terrain materials",
+    "mountain silhouettes",
+    "mapped roads and settlement context",
+    "ground-level camera",
+    "dynamic sky and natural lighting"
+  ],
+  "qualityProfiles": {
+    "high": "Nanite where supported; Lumen where performance permits; high texture detail",
+    "medium": "reduced shadows and foliage density; balanced streaming",
+    "low": "simplified materials and shadows; reduced streaming radius"
+  },
+  "acceptanceChecks": [
+    "terrain elevation is not flat",
+    "recognizable Chamonix valley and surrounding peaks",
+    "player georeference is correct",
+    "streaming loads nearby terrain and releases distant data",
+    "document measured FPS and memory; do not claim performance without measurements"
+  ],
+  "notes": [
+    "This is configuration/documentation only. No Unreal Engine binaries or licensed content are committed.",
+    "Cesium plugin and required terrain/content providers must be installed/configured locally."
+  ]
+}
