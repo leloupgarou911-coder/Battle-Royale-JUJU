@@ -175,3 +175,8 @@ The Playwright suite runs Chromium in desktop and mobile viewports. It checks th
 - Building interiors are generated fictional layouts selected from mapped building tags. Mapped floor counts are metadata; they do not prove the real arrangement of rooms, stairs, or furniture.
 - `src/game/Game.ts` is a separate Three.js prototype and is not currently wired into the published MapLibre top-down game mode. The active public game remains a map-based exploration prototype, not a completed 3D battle-royale experience.
 - Map tiles require an internet connection. Browser-cached exploration history and save slots do not make the map available offline.
+
+
+## Unreal Engine prototype (migration track)
+
+A native Unreal Engine prototype scaffold is available in [`unreal/`](./unreal/). It begins with a Chamonix terrain validation using Cesium for Unreal. This is a separate migration track; the browser version remains the current playable version. The scaffold CI validates JSON/configuration only and does not build Unreal or certify rendered visuals. See [`unreal/README.md`](./unreal/README.md).
