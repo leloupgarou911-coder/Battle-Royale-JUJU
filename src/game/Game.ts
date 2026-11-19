@@ -1106,7 +1106,6 @@ export class Game {
           const windowsOnEdge = Math.max(1, Math.floor(edgeLength / 4.1));
           const spacing = edgeLength / windowsOnEdge;
           const winWidth = Math.min(1.42, spacing * 0.48);
-          const winHeight = Math.min(1.58, Math.max(1.05, extrudeDepth / floorCount * 0.5));
           for (let floor = 0; floor < floorCount && facadeWindows.length < 2200; floor += 1) {
             const floorHeight = extrudeDepth / floorCount;
             const winY = b.baseHeight + groundY + floor * floorHeight + floorHeight * 0.57;
@@ -1181,13 +1180,15 @@ export class Game {
         frames.setMatrixAt(idx, dummy.matrix);
         frames.setColorAt(idx, tint.setHex(idx % 7 === 0 ? 0xc7bcae : idx % 5 === 0 ? 0xaaa69d : 0xe2ddd3));
 
-        dummy.position.set(w.x, w.y, w.z + 0.015);
+        const outwardX = Math.sin(w.yaw);
+        const outwardZ = Math.cos(w.yaw);
+        dummy.position.set(w.x + outwardX * 0.015, w.y, w.z + outwardZ * 0.015);
         dummy.scale.set(w.width, 1.42, 1);
         dummy.updateMatrix();
         glasses.setMatrixAt(idx, dummy.matrix);
         glasses.setColorAt(idx, tint.setHex(w.tint));
 
-        dummy.position.set(w.x, w.y - 0.88, w.z + 0.055);
+        dummy.position.set(w.x + outwardX * 0.055, w.y - 0.88, w.z + outwardZ * 0.055);
         dummy.scale.set(w.width + 0.3, 0.13, 1);
         dummy.updateMatrix();
         sills.setMatrixAt(idx, dummy.matrix);
@@ -1223,7 +1224,9 @@ export class Game {
         dummy.updateMatrix();
         slabs.setMatrixAt(idx, dummy.matrix);
 
-        dummy.position.set(b.x, b.y + 0.43, b.z);
+        const frontX = Math.sin(b.yaw) * 0.36;
+        const frontZ = Math.cos(b.yaw) * 0.36;
+        dummy.position.set(b.x + frontX, b.y + 0.43, b.z + frontZ);
         dummy.scale.set(b.width, 1, 1);
         dummy.updateMatrix();
         rails.setMatrixAt(idx, dummy.matrix);
