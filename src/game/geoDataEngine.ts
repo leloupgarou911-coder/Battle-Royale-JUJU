@@ -168,7 +168,8 @@ export interface HeritageProvider {
 const DEFAULT_OFM_TILE_TEMPLATE = "https://tiles.openfreemap.org/planet/20261115_080022_pt/{z}/{x}/{y}.pbf";
 const DEFAULT_OFM_VERSION = "20261115_080022_pt";
 const OFM_TILEJSON_URL = "https://tiles.openfreemap.org/planet";
-const MAPTERHORN_TILE_URL = "https://tiles.mapterhorn.com/12/{x}/{y}.webp";
+const MAPTERHORN_TILE_URL = "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp";
+const MAPLIBRE_DEM_TILE_URL = "https://demotiles.maplibre.org/terrain-tiles/{z}/{x}/{y}.png";
 
 const ROAD_CLASSES = new Set([
   "motorway",
@@ -896,7 +897,8 @@ export class MapterhornDemProvider implements ElevationProvider {
       const urls = [
         `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/12/${tx}/${ty}.png`,
         `https://elevation-tiles-prod.s3.amazonaws.com/terrarium/12/${tx}/${ty}.png`,
-        MAPTERHORN_TILE_URL.replace("{x}", String(tx)).replace("{y}", String(ty)),
+        MAPLIBRE_DEM_TILE_URL.replace("{z}", "12").replace("{x}", String(tx)).replace("{y}", String(ty)),
+        MAPTERHORN_TILE_URL.replace("{z}", "12").replace("{x}", String(tx)).replace("{y}", String(ty)),
       ];
       const failures: string[] = [];
       for (const url of urls) {
