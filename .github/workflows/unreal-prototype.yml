@@ -27,7 +27,7 @@ jobs:
           root = Path("unreal/JUJUWorldUE")
           project_path = root / "JUJUWorldUE.uproject"
           config_path = Path("unreal/PROTOTYPE_CONFIG.json")
-          readme_path = Path("unreal/README.md"
+          readme_path = Path("unreal/README.md")
 
           project = json.loads(project_path.read_text(encoding="utf-8"))
           config = json.loads(config_path.read_text(encoding="utf-8"))
