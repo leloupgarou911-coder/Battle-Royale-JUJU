@@ -10,7 +10,7 @@ function parseDiagnosticsText(text) {
   const bldgMatch = text.match(/Extracted:\s*(\d+)\s*bldg\s*·\s*(\d+)\s*roads\s*·\s*(\d+)\s*parks\/cover\s*·\s*(\d+)\s*water\s*·\s*(\d+)\s*POIs\/heritage/i);
   const tilesMatch = text.match(/MVT Tiles:\s*(\d+)\/(\d+)\s*\(err\s*(\d+),\s*cache\s*(\d+)\)/i);
   const statusMatch = text.match(/Status:\s*([A-Z_]+)\s*·\s*Settlement:\s*([a-z_]+)/i);
-  const demMatch = text.match(/DEM Relief:\s*(-?\d+)\s*m\s*\(Δ\s*([+-]?\d+)\.\.([+-]?\d+)\s*m\)/i);
+  const demMatch = text.match(/DEM Relief:\s*(-?\d+(?:\.\d+)?)\s*m\s*\(Δ\s*([+-]?\d+(?:\.\d+)?)\.\.([+-]?\d+(?:\.\d+)?)\s*m\)/i);
   return {
     status: statusMatch?.[1]?.toLowerCase() ?? null,
     settlement: statusMatch?.[2]?.toLowerCase() ?? null,
