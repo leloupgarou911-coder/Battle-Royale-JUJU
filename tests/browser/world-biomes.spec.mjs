@@ -91,10 +91,10 @@ test.describe("10-Biome Real Earth World Matrix", () => {
 
     // Move forward to verify live gameplay stability in dense city
     const posBefore = await page.locator("#game-3d-position").textContent();
-    const fwd = page.locator('[data-3d-move="w"]');
-    await fwd.dispatchEvent("pointerdown", { pointerId: 1 });
+    // Use real keyboard press/release events to verify the gameplay movement path.
+    await page.keyboard.down("w");
     await page.waitForTimeout(700);
-    await fwd.dispatchEvent("pointerup", { pointerId: 1 });
+    await page.keyboard.up("w");
     await expect(page.locator("#game-3d-position")).not.toHaveText(posBefore ?? "", { timeout: 6_000 });
 
     await page.locator("#game-3d-overlay").screenshot({ path: testInfo.outputPath("biome-01-dense-city.png"), animations: "disabled" });
