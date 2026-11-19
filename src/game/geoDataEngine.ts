@@ -1035,7 +1035,9 @@ export class MapterhornDemProvider implements ElevationProvider {
         const z = -half + (row / segments) * sizeMeters;
         const sLng = lng + x / metersPerLng;
         const sLat = lat - z / 111_320;
-        // Missing neighboring tiles use the origin height as a local flat fallback.\n        // A single unavailable tile must not erase valid elevation data for the whole area.\n        const absElev = sampleGeo(sLng, sLat, originElevation);
+        // Missing neighboring tiles use the origin height as a local flat fallback.
+        // A single unavailable tile must not erase valid elevation data for the whole area.
+        const absElev = sampleGeo(sLng, sLat, originElevation);
         // Keep sea-level oceans slightly below 0 if real ocean floor / shoreline is negative while spawn at origin sits around y = 0
         const delta = Math.max(-45, Math.min(180, absElev - originElevation));
         if (delta < minDelta) minDelta = delta;
@@ -1050,7 +1052,10 @@ export class MapterhornDemProvider implements ElevationProvider {
       originElevationMeters: Math.round(originElevation * 10) / 10,
       minElevationDelta: Number.isFinite(minDelta) ? Math.round(minDelta * 10) / 10 : 0,
       maxElevationDelta: Number.isFinite(maxDelta) ? Math.round(maxDelta * 10) / 10 : 0,
-      sourceLabel: "Mapterhorn Terrarium DEM (z12)",
+      sourceLabel: failedTiles.length
+        ? `Terrarium DEM (z12, partial coverage ${loadedTiles.size}/${needed.size})`
+        : "Terrarium DEM (z12)",
+      ...(failedTiles.length ? { error: `DEM partial coverage: ${failedTiles.join("; ")}` } : {}),
     };
   }
 }
