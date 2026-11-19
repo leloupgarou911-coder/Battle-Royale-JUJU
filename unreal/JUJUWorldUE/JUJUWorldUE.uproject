@@ -1,0 +1,19 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "5.5",
+  "Category": "Games",
+  "Description": "JUJU WORLD real-geography exploration prototype. Unreal Engine project scaffold; Cesium plugin must be installed separately.",
+  "Modules": [
+    {
+      "Name": "JUJUWorldUE",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "CesiumForUnreal",
+      "Enabled": true
+    }
+  ]
+}
